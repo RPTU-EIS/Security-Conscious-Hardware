@@ -1,0 +1,36 @@
+naming_style onespin
+# Name Radix Color Is_Clock
+clk_i DEFAULT DEFAULT { true} { false}
+rst_ni DEFAULT DEFAULT { false} { false}
+SEPARATOR_Inputs NONE DEFAULT { false} { false}
+flush_i DEFAULT DEFAULT { false} { false}
+in_vld_i DEFAULT DEFAULT { false} { false}
+out_rdy_i DEFAULT DEFAULT { false} { false}
+id_i DEFAULT DEFAULT { false} { false}
+opcode_i DEFAULT DEFAULT { false} { false}
+op_a_i DEFAULT DEFAULT { false} { false}
+op_b_i DEFAULT DEFAULT { false} { false}
+SEPARATOR_Outputs NONE DEFAULT { false} { false}
+in_rdy_o DEFAULT DEFAULT { false} { false}
+out_vld_o DEFAULT DEFAULT { false} { false}
+id_o DEFAULT DEFAULT { false} { false}
+res_o DEFAULT DEFAULT { false} { false}
+SEPARATOR_States NONE DEFAULT { false} { false}
+state_q DEFAULT DEFAULT { false} { false}
+id_q DEFAULT DEFAULT { false} { false}
+cnt_q DEFAULT DEFAULT { false} { false}
+comp_inv_q DEFAULT DEFAULT { false} { false}
+div_res_zero_q DEFAULT DEFAULT { false} { false}
+op_a_q DEFAULT DEFAULT { false} { false}
+op_b_q DEFAULT DEFAULT { false} { false}
+op_b_zero_q DEFAULT DEFAULT { false} { false}
+rem_sel_q DEFAULT DEFAULT { false} { false}
+res_inv_q DEFAULT DEFAULT { false} { false}
+res_q DEFAULT DEFAULT { false} { false}
+SEPARATOR_Nets NONE DEFAULT { false} { false}
+lzc_a_input BIN DEFAULT { false} { false}
+lzc_a_result DEFAULT DEFAULT { false} { false}
+lzc_a_no_one DEFAULT DEFAULT { false} { false}
+lzc_b_input BIN DEFAULT { false} { false}
+lzc_b_result DEFAULT DEFAULT { false} { false}
+lzc_b_no_one DEFAULT DEFAULT { false} { false}

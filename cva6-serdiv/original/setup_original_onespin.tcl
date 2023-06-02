@@ -11,6 +11,14 @@ read_verilog -golden  -pragma_ignore {}  -version sv2012 {$script_path/../common
 read_verilog -golden  -pragma_ignore {}  -version sv2012 {$script_path/../common/lzc.sv}
 read_verilog -golden  -pragma_ignore {}  -version sv2012 {$script_path/serdiv.sv}
 
+set_elaborate_option -golden -verilog_parameter {WIDTH=8}
+
 elaborate -golden
 
 compile -golden
+
+set_mode mv
+
+read_sva -version {sv2012} {$script_path/serdiv.sva}
+
+check -all [get_checks]
