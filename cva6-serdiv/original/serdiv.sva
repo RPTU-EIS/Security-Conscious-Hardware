@@ -63,7 +63,7 @@ module property_checker import ariane_pkg::*;
   property reset_p;
     reset_sequence
     |=>
-    t ##0 (serdiv.state_q        == IDLE) and
+    t ##0 (serdiv.state_q == IDLE) and
 
     t ##0 (serdiv.in_rdy_o  == (!serdiv.flush_i && !serdiv.in_vld_i)) and
     t ##0 (serdiv.out_vld_o == 1'b0);
@@ -227,8 +227,8 @@ module property_checker import ariane_pkg::*;
     t ##0 (serdiv.out_vld_o == 1'b0) and
     t ##1 (serdiv.out_vld_o == 1'b1) and
 
-    t_finish ##0 (serdiv.id_o == id) and
-    t_finish ##0 (serdiv.res_o == '0);
+    t ##1 (serdiv.id_o == id) and
+    t ##1 (serdiv.res_o == '0);
   endproperty
   div_fast_p_a: assert property (disable iff (!rst_ni) div_fast_p);
 
@@ -403,8 +403,8 @@ module property_checker import ariane_pkg::*;
     t ##0 (serdiv.out_vld_o == 1'b0) and
     t ##1 (serdiv.out_vld_o == 1'b1) and
 
-    t_finish ##0 (serdiv.id_o == id) and
-    t_finish ##0 (serdiv.res_o == op_a);
+    t ##1 (serdiv.id_o == id) and
+    t ##1 (serdiv.res_o == op_a);
   endproperty
   rem_fast_p_a: assert property (disable iff (!rst_ni) rem_fast_p);
 
