@@ -14,13 +14,15 @@ The serial division module features four different types of operation:
 An overview of the operation timing is shown in the table below.  
 Latency is measured as the number of clock cycles between asserting *in_vld_i* and *out_rdy_o*.  
 
-| Operation    | Condition                   | Latency             | Worst-Case Latency |
-|--------------|-----------------------------|---------------------|--------------------|
-| UDIV \| UREM | lzc(x) <= lzc(y)            | lzc(y) - lzc(x) + 2 | WIDTH + 2          |
-|              | lzc(x) >  lzc(y)            | 1                   | 1                  |
-| DIV \| REM   | lzc(x) <= lzc(y) && b != -1 | lzc(y) - lzc(x) + 2 | WIDTH + 2          |
-|              | lzc(x) >  lzc(y) && b != -1 | 1                   | 1                  |
-|              | b == -1                     | WIDTH + 2           | WIDTH + 2          |
+| Operation    | Condition                              | Latency             | Max. Latency |
+|--------------|----------------------------------------|---------------------|--------------|
+| UDIV \| UREM | lzc(x) <= lzc(y) && b != 0             | lzc(y) - lzc(x) + 2 | WIDTH + 1    |
+|              | lzc(x) >  lzc(y) && b != 0             | 1                   | 1            |
+|              | b == 0                                 | WIDTH + 2           | WIDTH + 2    |
+| DIV \| REM   | lzc(x) <= lzc(y) && b $\notin$ {0, -1} | lzc(y) - lzc(x) + 2 | WIDTH + 1    |
+|              | lzc(x) >  lzc(y) && b $\notin$ {0, -1} | 1                   | 1            |
+|              | b ==  0                                | WIDTH + 2           | WIDTH + 2    |
+|              | b == -1                                | WIDTH + 2           | WIDTH + 2    |
 
 Legend:  
  - x is {~a[WIDTH-2:0], 1'b0} if a < 0, otherwise x is a.

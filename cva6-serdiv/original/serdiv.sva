@@ -56,7 +56,7 @@ module property_checker import ariane_pkg::*;
 
 
   sequence t_finish;
-    await(t, serdiv.out_vld_o == 1'b1, WIDTH+2);
+    await(t, serdiv.out_vld_o == 1'b1, WIDTH+1);
   endsequence
 
 
@@ -73,7 +73,7 @@ module property_checker import ariane_pkg::*;
 
   property flush_p;
     t ##0 (serdiv.flush_i == 1'b1)
-    implies
+  implies
     t ##1 (serdiv.state_q == IDLE) and
 
     t ##0 (serdiv.in_rdy_o  == 1'b0) and
@@ -86,7 +86,7 @@ module property_checker import ariane_pkg::*;
     t ##0 (serdiv.state_q == IDLE) and
     t ##0 (serdiv.flush_i == 1'b0) and
     t ##0 (serdiv.in_vld_i == 1'b0)
-    implies
+  implies
     t ##1 (serdiv.state_q == IDLE) and
 
     t ##0 (serdiv.in_rdy_o  == 1'b1) and
@@ -95,9 +95,9 @@ module property_checker import ariane_pkg::*;
   idle_p_a: assert property (disable iff (!rst_ni) idle_p);
 
 
-  /* Unsigned division if lzc(a) <= lzc(b)
+  /* Unsigned division if lzc(a) <= lzc(b) and b != 0
    * This operation takes lzc(b)-lzc(a)+2 clock cycles
-   * Worst case latency is thus WIDTH+2 clock cycles
+   * Worst case latency is thus WIDTH+1 clock cycles
    */
   property udiv_normal_p;
   logic [WIDTH-1:0] op_a, op_b;
@@ -107,12 +107,13 @@ module property_checker import ariane_pkg::*;
     t ##0 (serdiv.in_vld_i == 1'b1) and
     t ##0 (serdiv.opcode_i == UDIV) and
     t ##0 (lzc(serdiv.op_a_i) <= lzc(serdiv.op_b_i)) and
+    t ##0 (serdiv.op_b_i != '0) and
 
     t ##0 set_freeze(op_a, serdiv.op_a_i) and
     t ##0 set_freeze(op_b, serdiv.op_b_i) and
     t ##0 set_freeze(id, serdiv.id_i)
 
-    implies
+  implies
 
     during_o(t, 1, t_finish, -1, serdiv.state_q == DIVIDE) and
     t_finish ##0 (serdiv.state_q == FINISH) and
@@ -128,7 +129,7 @@ module property_checker import ariane_pkg::*;
   udiv_normal_p_a: assert property (disable iff (!rst_ni) udiv_normal_p);
 
 
-  /* Unsigned division if lzc(a) >= lzc(b)
+  /* Unsigned division if lzc(a) >= lzc(b) and b != 0
    * This operation always takes 1 clock cycle
    * Depending on out_rdy_i the module can skip the FINISH state and go to IDLE
    */
@@ -140,11 +141,12 @@ module property_checker import ariane_pkg::*;
     t ##0 (serdiv.in_vld_i == 1'b1) and
     t ##0 (serdiv.opcode_i == UDIV) and
     t ##0 (lzc(serdiv.op_a_i) > lzc(serdiv.op_b_i)) and
+    t ##0 (serdiv.op_b_i != '0) and
 
     t ##0 set_freeze(id, serdiv.id_i) and
     t ##1 set_freeze(out_rdy, serdiv.out_rdy_i)
 
-    implies
+  implies
 
     t ##1 (serdiv.state_q == DIVIDE) and
     t ##2 (serdiv.state_q == (out_rdy ? IDLE : FINISH)) and
@@ -161,11 +163,40 @@ module property_checker import ariane_pkg::*;
   udiv_fast_p_a: assert property (disable iff (!rst_ni) udiv_fast_p);
 
 
-  /* Signed division if lzc(a') <= lzc(b') and b != -1
+  /* Unsigned division if b == 0
+   * This operation always takes WIDTH+2 clock cycles
+   */
+  property udiv_zero_p;
+  logic [TRANS_ID_BITS-1:0] id;
+    t ##0 (serdiv.state_q == IDLE) and
+    during_o(t, 0, t, WIDTH+2, serdiv.flush_i == 1'b0) and
+    t ##0 (serdiv.in_vld_i == 1'b1) and
+    t ##0 (serdiv.opcode_i == UDIV) and
+    t ##0 (serdiv.op_b_i == '0) and
+
+    t ##0 set_freeze(id, serdiv.id_i) 
+
+  implies
+
+    during_o(t, 1, t, WIDTH+1, serdiv.state_q == DIVIDE) and
+    t ##(WIDTH+2) (serdiv.state_q == FINISH) and
+
+    during_o(t, 1, t, WIDTH+2, serdiv.in_rdy_o == 1'b0) and
+
+    during_o(t, 0, t, WIDTH+1, serdiv.out_vld_o == 1'b0) and
+    t ##(WIDTH+2) (serdiv.out_vld_o == 1'b1) and
+
+    t ##(WIDTH+2) (serdiv.id_o == id) and
+    t ##(WIDTH+2) (serdiv.res_o == '1);
+  endproperty
+  udiv_zero_p_a: assert property (disable iff (!rst_ni) udiv_zero_p);
+
+
+  /* Signed division if lzc(a') <= lzc(b') and b != -1 and b != 0
    * a' = a[WIDTH-1] ? {~a[WIDTH-2:0], 1'b0} : a
    * b' = b[WIDTH-1] ? ~b : b
    * This operation takes lzc(b')-lzc(a') + 2 clock cycles
-   * Worst case latency is thus WIDTH+2 clock cycles
+   * Worst case latency is thus WIDTH+1 clock cycles
    */
   property div_normal_p;
   logic [WIDTH-1:0] op_a, op_b;
@@ -174,14 +205,15 @@ module property_checker import ariane_pkg::*;
     during(t, t_finish, serdiv.flush_i == 1'b0) and
     t ##0 (serdiv.in_vld_i == 1'b1) and
     t ##0 (serdiv.opcode_i == DIV) and
+    t ##0 (lzc(serdiv.op_a_i[WIDTH-1] ? {~serdiv.op_a_i[WIDTH-2:0], 1'b1} : serdiv.op_a_i) <= lzc(serdiv.op_b_i[WIDTH-1] ? ~serdiv.op_b_i : serdiv.op_b_i)) and
     t ##0 (serdiv.op_b_i != '1) and
-    t ##0 (lzc(serdiv.op_a_i[WIDTH-1] ? {~serdiv.op_a_i[WIDTH-2:0], 1'b0} : serdiv.op_a_i) <= lzc(serdiv.op_b_i[WIDTH-1] ? ~serdiv.op_b_i : serdiv.op_b_i)) and
+    t ##0 (serdiv.op_b_i != '0) and
 
     t ##0 set_freeze(op_a, serdiv.op_a_i) and
     t ##0 set_freeze(op_b, serdiv.op_b_i) and
     t ##0 set_freeze(id, serdiv.id_i)
 
-    implies
+  implies
 
     during_o(t, 1, t_finish, -1, serdiv.state_q == DIVIDE) and
     t_finish ##0 (serdiv.state_q == FINISH) and
@@ -197,7 +229,7 @@ module property_checker import ariane_pkg::*;
   div_normal_p_a: assert property (disable iff (!rst_ni) div_normal_p);
 
 
-  /* Signed division if lzc(a') > lzc(b') and b != -1
+  /* Signed division if lzc(a') > lzc(b') and b != -1 and b != 0
    * a' = a[WIDTH-1] ? {~a[WIDTH-2:0], 1'b0} : a
    * b' = b[WIDTH-1] ? ~b : b
    * This operation always takes 1 clock cycle
@@ -210,13 +242,14 @@ module property_checker import ariane_pkg::*;
     during(t, t_finish, serdiv.flush_i == 1'b0) and
     t ##0 (serdiv.in_vld_i == 1'b1) and
     t ##0 (serdiv.opcode_i == DIV) and
+    t ##0 (lzc(serdiv.op_a_i[WIDTH-1] ? {~serdiv.op_a_i[WIDTH-2:0], 1'b1} : serdiv.op_a_i) > lzc(serdiv.op_b_i[WIDTH-1] ? ~serdiv.op_b_i : serdiv.op_b_i)) and
     t ##0 (serdiv.op_b_i != '1) and
-    t ##0 (lzc(serdiv.op_a_i[WIDTH-1] ? {~serdiv.op_a_i[WIDTH-2:0], 1'b0} : serdiv.op_a_i) > lzc(serdiv.op_b_i[WIDTH-1] ? ~serdiv.op_b_i : serdiv.op_b_i)) and
+    t ##0 (serdiv.op_b_i != '0) and
 
     t ##0 set_freeze(id, serdiv.id_i) and
     t ##1 set_freeze(out_rdy, serdiv.out_rdy_i)
 
-    implies
+  implies
 
     t ##1 (serdiv.state_q == DIVIDE) and
     t ##2 (serdiv.state_q == (out_rdy ? IDLE : FINISH)) and
@@ -251,7 +284,7 @@ module property_checker import ariane_pkg::*;
     t ##0 set_freeze(op_a, serdiv.op_a_i) and
     t ##0 set_freeze(id, serdiv.id_i)
 
-    implies
+  implies
 
     during_o(t, 1, t, WIDTH+1, serdiv.state_q == DIVIDE) and
     t ##(WIDTH+2) (serdiv.state_q == FINISH) and
@@ -267,9 +300,38 @@ module property_checker import ariane_pkg::*;
   div_minus_one_p_a: assert property (disable iff (!rst_ni) div_minus_one_p);
 
 
-  /* Unsigned remainder if lzc(a) <= lzc(b)
+  /* Signed division if b == 0
+   * This operation always takes WIDTH+2 clock cycles
+   */
+  property div_zero_p;
+  logic [TRANS_ID_BITS-1:0] id;
+    t ##0 (serdiv.state_q == IDLE) and
+    during_o(t, 0, t, WIDTH+2, serdiv.flush_i == 1'b0) and
+    t ##0 (serdiv.in_vld_i == 1'b1) and
+    t ##0 (serdiv.opcode_i == DIV) and
+    t ##0 (serdiv.op_b_i == '0) and
+
+    t ##0 set_freeze(id, serdiv.id_i) 
+
+  implies
+
+    during_o(t, 1, t, WIDTH+1, serdiv.state_q == DIVIDE) and
+    t ##(WIDTH+2) (serdiv.state_q == FINISH) and
+
+    during_o(t, 1, t, WIDTH+2, serdiv.in_rdy_o == 1'b0) and
+
+    during_o(t, 0, t, WIDTH+1, serdiv.out_vld_o == 1'b0) and
+    t ##(WIDTH+2) (serdiv.out_vld_o == 1'b1) and
+
+    t ##(WIDTH+2) (serdiv.id_o == id) and
+    t ##(WIDTH+2) (serdiv.res_o == '1);
+  endproperty
+  div_zero_p_a: assert property (disable iff (!rst_ni) div_zero_p);
+
+
+  /* Unsigned remainder if lzc(a) <= lzc(b) and b != 0
    * This operation takes lzc(b)-lzc(a)+2 clock cycles
-   * Worst case latency is thus WIDTH+2 clock cycles
+   * Worst case latency is thus WIDTH+1 clock cycles
    */
   property urem_normal_p;
   logic [WIDTH-1:0] op_a, op_b;
@@ -279,12 +341,13 @@ module property_checker import ariane_pkg::*;
     t ##0 (serdiv.in_vld_i == 1'b1) and
     t ##0 (serdiv.opcode_i == UREM) and
     t ##0 (lzc(serdiv.op_a_i) <= lzc(serdiv.op_b_i)) and
+    t ##0 (serdiv.op_b_i != '0) and
 
     t ##0 set_freeze(op_a, serdiv.op_a_i) and
     t ##0 set_freeze(op_b, serdiv.op_b_i) and
     t ##0 set_freeze(id, serdiv.id_i)
 
-    implies
+  implies
 
     during_o(t, 1, t_finish, -1, serdiv.state_q == DIVIDE) and
     t_finish ##0 (serdiv.state_q == FINISH) and
@@ -300,7 +363,7 @@ module property_checker import ariane_pkg::*;
   urem_normal_p_a: assert property (disable iff (!rst_ni) urem_normal_p);
 
 
-  /* Unsigned remainder if lzc(a) >= lzc(b)
+  /* Unsigned remainder if lzc(a) >= lzc(b) and b != 0
    * This operation always takes 1 clock cycle
    * Depending on out_rdy_i the module can skip the FINISH state and go to IDLE
    */
@@ -313,12 +376,13 @@ module property_checker import ariane_pkg::*;
     t ##0 (serdiv.in_vld_i == 1'b1) and
     t ##0 (serdiv.opcode_i == UREM) and
     t ##0 (lzc(serdiv.op_a_i) > lzc(serdiv.op_b_i)) and
+    t ##0 (serdiv.op_b_i != '0) and
 
     t ##0 set_freeze(op_a, serdiv.op_a_i) and
     t ##0 set_freeze(id, serdiv.id_i) and
     t ##1 set_freeze(out_rdy, serdiv.out_rdy_i)
 
-    implies
+  implies
 
     t ##1 (serdiv.state_q == DIVIDE) and
     t ##2 (serdiv.state_q == (out_rdy ? IDLE : FINISH)) and
@@ -335,11 +399,42 @@ module property_checker import ariane_pkg::*;
   urem_fast_p_a: assert property (disable iff (!rst_ni) urem_fast_p);
 
 
-  /* Signed remainder if lzc(a') <= lzc(b') and b != -1
+  /* Unsigned remainder if b == 0
+   * This operation always takes WIDTH+2 clock cycles
+   */
+  property urem_zero_p;
+  logic [WIDTH-1:0] op_a;
+  logic [TRANS_ID_BITS-1:0] id;
+    t ##0 (serdiv.state_q == IDLE) and
+    during_o(t, 0, t, WIDTH+2, serdiv.flush_i == 1'b0) and
+    t ##0 (serdiv.in_vld_i == 1'b1) and
+    t ##0 (serdiv.opcode_i == UREM) and
+    t ##0 (serdiv.op_b_i == '0) and
+
+    t ##0 set_freeze(op_a, serdiv.op_a_i) and
+    t ##0 set_freeze(id, serdiv.id_i) 
+
+  implies
+
+    during_o(t, 1, t, WIDTH+1, serdiv.state_q == DIVIDE) and
+    t ##(WIDTH+2) (serdiv.state_q == FINISH) and
+
+    during_o(t, 1, t, WIDTH+2, serdiv.in_rdy_o == 1'b0) and
+
+    during_o(t, 0, t, WIDTH+1, serdiv.out_vld_o == 1'b0) and
+    t ##(WIDTH+2) (serdiv.out_vld_o == 1'b1) and
+
+    t ##(WIDTH+2) (serdiv.id_o == id) and
+    t ##(WIDTH+2) (serdiv.res_o == op_a);
+  endproperty
+  urem_zero_p_a: assert property (disable iff (!rst_ni) urem_zero_p);
+
+
+  /* Signed remainder if lzc(a') <= lzc(b') and b != -1 and b != 0
    * a' = a[WIDTH-1] ? {~a[WIDTH-2:0], 1'b0} : a
    * b' = b[WIDTH-1] ? ~b : b
    * This operation takes lzc(b')-lzc(a') + 2 clock cycles
-   * Worst case latency is thus WIDTH+2 clock cycles
+   * Worst case latency is thus WIDTH+1 clock cycles
    */
   property rem_normal_p;
   logic [WIDTH-1:0] op_a, op_b;
@@ -348,14 +443,15 @@ module property_checker import ariane_pkg::*;
     during(t, t_finish, serdiv.flush_i == 1'b0) and
     t ##0 (serdiv.in_vld_i == 1'b1) and
     t ##0 (serdiv.opcode_i == REM) and
+    t ##0 (lzc(serdiv.op_a_i[WIDTH-1] ? {~serdiv.op_a_i[WIDTH-2:0], 1'b1} : serdiv.op_a_i) <= lzc(serdiv.op_b_i[WIDTH-1] ? ~serdiv.op_b_i : serdiv.op_b_i)) and
     t ##0 (serdiv.op_b_i != '1) and
-    t ##0 (lzc(serdiv.op_a_i[WIDTH-1] ? {~serdiv.op_a_i[WIDTH-2:0], 1'b0} : serdiv.op_a_i) <= lzc(serdiv.op_b_i[WIDTH-1] ? ~serdiv.op_b_i : serdiv.op_b_i)) and
+    t ##0 (serdiv.op_b_i != '0) and
 
     t ##0 set_freeze(op_a, serdiv.op_a_i) and
     t ##0 set_freeze(op_b, serdiv.op_b_i) and
     t ##0 set_freeze(id, serdiv.id_i)
 
-    implies
+  implies
 
     during_o(t, 1, t_finish, -1, serdiv.state_q == DIVIDE) and
     t_finish ##0 (serdiv.state_q == FINISH) and
@@ -371,7 +467,7 @@ module property_checker import ariane_pkg::*;
   rem_normal_p_a: assert property (disable iff (!rst_ni) rem_normal_p);
 
 
-  /* Signed remainder if lzc(a') > lzc(b') and b != -1
+  /* Signed remainder if lzc(a') > lzc(b') and b != -1 and b != 0
    * a' = a[WIDTH-1] ? {~a[WIDTH-2:0], 1'b0} : a
    * b' = b[WIDTH-1] ? ~b : b
    * This operation always takes 1 clock cycle
@@ -385,14 +481,15 @@ module property_checker import ariane_pkg::*;
     during(t, t_finish, serdiv.flush_i == 1'b0) and
     t ##0 (serdiv.in_vld_i == 1'b1) and
     t ##0 (serdiv.opcode_i == REM) and
+    t ##0 (lzc(serdiv.op_a_i[WIDTH-1] ? {~serdiv.op_a_i[WIDTH-2:0], 1'b1} : serdiv.op_a_i) > lzc(serdiv.op_b_i[WIDTH-1] ? ~serdiv.op_b_i : serdiv.op_b_i)) and
     t ##0 (serdiv.op_b_i != '1) and
-    t ##0 (lzc(serdiv.op_a_i[WIDTH-1] ? {~serdiv.op_a_i[WIDTH-2:0], 1'b0} : serdiv.op_a_i) > lzc(serdiv.op_b_i[WIDTH-1] ? ~serdiv.op_b_i : serdiv.op_b_i)) and
+    t ##0 (serdiv.op_b_i != '0) and
 
     t ##0 set_freeze(op_a, serdiv.op_a_i) and
     t ##0 set_freeze(id, serdiv.id_i) and
     t ##1 set_freeze(out_rdy, serdiv.out_rdy_i)
 
-    implies
+  implies
 
     t ##1 (serdiv.state_q == DIVIDE) and
     t ##2 (serdiv.state_q == (out_rdy ? IDLE : FINISH)) and
@@ -422,7 +519,7 @@ module property_checker import ariane_pkg::*;
 
     t ##0 set_freeze(id, serdiv.id_i)
 
-    implies
+  implies
 
     during_o(t, 1, t, WIDTH+1, serdiv.state_q == DIVIDE) and
     t ##(WIDTH+2) (serdiv.state_q == FINISH) and
@@ -436,6 +533,37 @@ module property_checker import ariane_pkg::*;
     t ##(WIDTH+2) (serdiv.res_o == '0);
   endproperty
   rem_minus_one_p_a: assert property (disable iff (!rst_ni) rem_minus_one_p);
+
+
+  /* Signed remainder if b == 0
+   * This operation always takes WIDTH+2 clock cycles
+   */
+  property rem_zero_p;
+  logic [WIDTH-1:0] op_a;
+  logic [TRANS_ID_BITS-1:0] id;
+    t ##0 (serdiv.state_q == IDLE) and
+    during_o(t, 0, t, WIDTH+2, serdiv.flush_i == 1'b0) and
+    t ##0 (serdiv.in_vld_i == 1'b1) and
+    t ##0 (serdiv.opcode_i == REM) and
+    t ##0 (serdiv.op_b_i == '0) and
+
+    t ##0 set_freeze(op_a, serdiv.op_a_i) and
+    t ##0 set_freeze(id, serdiv.id_i) 
+
+  implies
+
+    during_o(t, 1, t, WIDTH+1, serdiv.state_q == DIVIDE) and
+    t ##(WIDTH+2) (serdiv.state_q == FINISH) and
+
+    during_o(t, 1, t, WIDTH+2, serdiv.in_rdy_o == 1'b0) and
+
+    during_o(t, 0, t, WIDTH+1, serdiv.out_vld_o == 1'b0) and
+    t ##(WIDTH+2) (serdiv.out_vld_o == 1'b1) and
+
+    t ##(WIDTH+2) (serdiv.id_o == id) and
+    t ##(WIDTH+2) (serdiv.res_o == op_a);
+  endproperty
+  rem_zero_p_a: assert property (disable iff (!rst_ni) rem_zero_p);
 
 
   property finish_wait_p;
