@@ -67,7 +67,7 @@ module serdiv import ariane_pkg::*; #(
   logic [WIDTH-1:0] lzc_a_input, lzc_b_input, op_b;
   logic [$clog2(WIDTH)-1:0] lzc_a_result, lzc_b_result;
   logic [$clog2(WIDTH+1)-1:0] shift_a;
-  logic [$clog2(WIDTH+1)-1:0] div_shift;
+  logic [$clog2(WIDTH+1):0] div_shift;
 
   logic a_reg_en, b_reg_en, res_reg_en, ab_comp, pm_sel, load_en;
   logic lzc_a_no_one, lzc_b_no_one;
