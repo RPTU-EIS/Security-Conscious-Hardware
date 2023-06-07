@@ -17,7 +17,6 @@ module property_checker import ariane_pkg::*;
   enum logic [1:0] {UDIV, DIV, UREM, REM} opcode_t;
 
   localparam bit [WIDTH-1:0] POS_1 = 'd1;
-  localparam bit [WIDTH-1:0] NEG_MAX = POS_1 << (WIDTH - 1);
 
 
   function int lzc(input logic [WIDTH-1:0] signal);
@@ -193,7 +192,7 @@ module property_checker import ariane_pkg::*;
 
 
   /* Signed division if lzc(a') <= lzc(b') and b != -1 and b != 0
-   * a' = a[WIDTH-1] ? {~a[WIDTH-2:0], 1'b0} : a
+   * a' = a[WIDTH-1] ? {~a[WIDTH-2:0], 1'b1} : a
    * b' = b[WIDTH-1] ? ~b : b
    * This operation takes lzc(b')-lzc(a') + 2 clock cycles
    * Worst case latency is thus WIDTH+1 clock cycles
@@ -230,7 +229,7 @@ module property_checker import ariane_pkg::*;
 
 
   /* Signed division if lzc(a') > lzc(b') and b != -1 and b != 0
-   * a' = a[WIDTH-1] ? {~a[WIDTH-2:0], 1'b0} : a
+   * a' = a[WIDTH-1] ? {~a[WIDTH-2:0], 1'b1} : a
    * b' = b[WIDTH-1] ? ~b : b
    * This operation always takes 1 clock cycle
    * Depending on out_rdy_i the module can skip the FINISH state and go to IDLE
@@ -295,7 +294,7 @@ module property_checker import ariane_pkg::*;
     t ##(WIDTH+2) (serdiv.out_vld_o == 1'b1) and
 
     t ##(WIDTH+2) (serdiv.id_o == id) and
-    t ##(WIDTH+2) (serdiv.res_o == ((op_a == NEG_MAX) ? NEG_MAX :(~op_a + POS_1)));
+    t ##(WIDTH+2) (serdiv.res_o == ~op_a + POS_1);
   endproperty
   div_minus_one_p_a: assert property (disable iff (!rst_ni) div_minus_one_p);
 
@@ -431,7 +430,7 @@ module property_checker import ariane_pkg::*;
 
 
   /* Signed remainder if lzc(a') <= lzc(b') and b != -1 and b != 0
-   * a' = a[WIDTH-1] ? {~a[WIDTH-2:0], 1'b0} : a
+   * a' = a[WIDTH-1] ? {~a[WIDTH-2:0], 1'b1} : a
    * b' = b[WIDTH-1] ? ~b : b
    * This operation takes lzc(b')-lzc(a') + 2 clock cycles
    * Worst case latency is thus WIDTH+1 clock cycles
@@ -468,7 +467,7 @@ module property_checker import ariane_pkg::*;
 
 
   /* Signed remainder if lzc(a') > lzc(b') and b != -1 and b != 0
-   * a' = a[WIDTH-1] ? {~a[WIDTH-2:0], 1'b0} : a
+   * a' = a[WIDTH-1] ? {~a[WIDTH-2:0], 1'b1} : a
    * b' = b[WIDTH-1] ? ~b : b
    * This operation always takes 1 clock cycle
    * Depending on out_rdy_i the module can skip the FINISH state and go to IDLE
