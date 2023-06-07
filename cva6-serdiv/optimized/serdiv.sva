@@ -270,36 +270,36 @@ module property_checker import ariane_pkg::*;
 
 
   /* Signed division if b == -1
-   * This operation takes lzc(b')-lzc(a') + 2 clock cycles
-   * a' = a[WIDTH-1] ? {~a[WIDTH-2:0], 1'b1} : a
-   * b' = b[WIDTH-1] ? ~b : b
-   * Worst case latency is thus WIDTH+2 clock cycles
-   * If a == -2**(WIDTH-1) the result must also be -2**(WIDTH-1) (overflow - see RISCV ISA)
+   * This operation always takes 1 clock cycles
+   * Depending on out_rdy_i the module can skip the FINISH state and go to IDLE
    */
   property div_minus_one_p;
   logic [WIDTH-1:0] op_a;
   logic [TRANS_ID_BITS-1:0] id;
+  logic out_rdy;
     t ##0 (serdiv.state_q == IDLE) and
-    during_o(t, 0, t, WIDTH+2, serdiv.flush_i == 1'b0) and
+    during_o(t, 0, t, 1, serdiv.flush_i == 1'b0) and
     t ##0 (serdiv.in_vld_i == 1'b1) and
     t ##0 (serdiv.opcode_i == DIV) and
     t ##0 (serdiv.op_b_i == '1) and
 
     t ##0 set_freeze(op_a, serdiv.op_a_i) and
-    t ##0 set_freeze(id, serdiv.id_i)
+    t ##0 set_freeze(id, serdiv.id_i) and
+    t ##1 set_freeze(out_rdy, serdiv.out_rdy_i)
 
   implies
 
-    during_o(t, 1, t_finish, -1, serdiv.state_q == DIVIDE) and
-    t_finish ##0 (serdiv.state_q == FINISH) and
+    t ##1 (serdiv.state_q == DIVIDE) and
+    t ##2 (serdiv.state_q == (out_rdy ? IDLE : FINISH)) and
 
-    during(t, t_finish, serdiv.in_rdy_o == 1'b0) and
+    t ##0 (serdiv.in_rdy_o == 1'b0) and
+    t ##1 (serdiv.in_rdy_o == 1'b0) and
 
-    during_o(t, 0, t_finish, -1, serdiv.out_vld_o == 1'b0) and
-    t_finish ##0 (serdiv.out_vld_o == 1'b1) and
+    t ##0 (serdiv.out_vld_o == 1'b0) and
+    t ##1 (serdiv.out_vld_o == 1'b1) and
 
-    t_finish ##0 (serdiv.id_o == id) and
-    t_finish ##0 (serdiv.res_o == ~op_a + POS_1);
+    t ##1 (serdiv.id_o == id) and
+    t ##1 (serdiv.res_o == ~op_a + POS_1);
   endproperty
   div_minus_one_p_a: assert property (disable iff (!rst_ni) div_minus_one_p);
 
@@ -518,34 +518,35 @@ module property_checker import ariane_pkg::*;
   rem_fast_p_a: assert property (disable iff (!rst_ni) rem_fast_p);
 
 
-  /* Signed remainder if  b == -1
-   * a' = a[WIDTH-1] ? {~a[WIDTH-2:0], 1'b1} : a
-   * b' = b[WIDTH-1] ? ~b : b
-   * This operation takes lzc(b')-lzc(a') + 2 clock cycles
-   * Worst case latency is thus WIDTH+2 clock cycles
+  /* Signed remainder if b == -1
+   * This operation always takes 1 clock cycles
+   * Depending on out_rdy_i the module can skip the FINISH state and go to IDLE
    */
   property rem_minus_one_p;
   logic [TRANS_ID_BITS-1:0] id;
+  logic out_rdy;
     t ##0 (serdiv.state_q == IDLE) and
-    during_o(t, 0, t, WIDTH+2, serdiv.flush_i == 1'b0) and
+    during_o(t, 0, t, 1, serdiv.flush_i == 1'b0) and
     t ##0 (serdiv.in_vld_i == 1'b1) and
     t ##0 (serdiv.opcode_i == REM) and
     t ##0 (serdiv.op_b_i == '1) and
 
-    t ##0 set_freeze(id, serdiv.id_i)
+    t ##0 set_freeze(id, serdiv.id_i) and
+    t ##1 set_freeze(out_rdy, serdiv.out_rdy_i)
 
   implies
 
-    during_o(t, 1, t_finish, -1, serdiv.state_q == DIVIDE) and
-    t_finish ##0 (serdiv.state_q == FINISH) and
+    t ##1 (serdiv.state_q == DIVIDE) and
+    t ##2 (serdiv.state_q == (out_rdy ? IDLE : FINISH)) and
 
-    during(t, t_finish, serdiv.in_rdy_o == 1'b0) and
+    t ##0 (serdiv.in_rdy_o == 1'b0) and
+    t ##1 (serdiv.in_rdy_o == 1'b0) and
 
-    during_o(t, 0, t_finish, -1, serdiv.out_vld_o == 1'b0) and
-    t_finish ##0 (serdiv.out_vld_o == 1'b1) and
+    t ##0 (serdiv.out_vld_o == 1'b0) and
+    t ##1 (serdiv.out_vld_o == 1'b1) and
 
-    t_finish ##0 (serdiv.id_o == id) and
-    t_finish ##0 (serdiv.res_o == '0);
+    t ##1 (serdiv.id_o == id) and
+    t ##1 (serdiv.res_o == '0);
   endproperty
   rem_minus_one_p_a: assert property (disable iff (!rst_ni) rem_minus_one_p);
 
