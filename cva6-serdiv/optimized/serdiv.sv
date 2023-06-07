@@ -106,8 +106,8 @@ module serdiv import ariane_pkg::*; #(
     .empty_o ( lzc_b_no_one )
   );
 
-  assign shift_a      = (lzc_a_no_one) ? WIDTH : lzc_a_result;
-  assign div_shift    = (lzc_b_no_one) ? WIDTH : lzc_b_result-shift_a;
+  assign shift_a      = (lzc_a_no_one) ? WIDTH         : lzc_a_result;
+  assign div_shift    = (lzc_b_no_one) ? WIDTH-shift_a : lzc_b_result-shift_a;
 
   assign op_b         = op_b_i <<< $unsigned(div_shift);
 
