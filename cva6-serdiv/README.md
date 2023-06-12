@@ -18,6 +18,7 @@ The following notation is used:
  - y is ~b if b < 0, otherwise y is b.
  - The *WIDTH* parameter specifies the width of the operands.  
  - The *lzc* function returns the number of leading zeros.  
+   If the input is 0, the result of *lzc* is WIDTH-1, not WIDTH
 
 
 ## Timing Behavior (Original Design)
@@ -50,3 +51,18 @@ A divisor of 0 or -1 causes the input of the leading zero counter to be 0, which
 In a security-conscious design, the worst-case operand-dependent latency dictates the performance.  
 This means that, in the original design, whenever b is confidential, the worst-case latency (WIDTH+2) must be assumed.  
 As a consequence, we have optimized the design by adding fast paths to handle these cases.
+
+
+## Timing Behavior (Security-Conscious Design)
+
+| op_a_label | op_b_label | Latency            | Max. Latency |
+|:----------:|:----------:|--------------------|--------------|
+| 0          | 0          | *Optimized Design* | WIDTH + 1    |
+| 0          | 1          | WIDTH + 1 - lzc(x) | WIDTH + 1    |
+| 1          | 0          | lzc(y) + 2         | WIDTH + 1    |
+| 1          | 1          | WIDTH + 1          | WIDTH + 1    |
+
+In the security-conscious design we introduce labels that indicate, whether or not an operand is public ("0") or confidential ("1").  
+The design itself was changed such that latency never depends on confidential information.  
+A dummy counter is introduced that delays the output until the specified latency is reached.  
+If both operands are confidential, the worst-case latency must be taken.  
