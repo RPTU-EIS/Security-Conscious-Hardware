@@ -1,0 +1,274 @@
+// @lang=sva @ts=8
+
+module property_checker import ariane_pkg::*;
+  #(parameter WIDTH = 8)
+  (
+  input clk_i,
+  input rst_ni
+  );
+
+  default clocking default_clk @(posedge clk_i); endclocking
+
+  `include "tidal.sv"
+
+`begin_tda(ops)
+
+  enum logic [1:0] {IDLE, DIVIDE, WAIT, FINISH} state_t;
+  enum logic [1:0] {UDIV, DIV, UREM, REM} opcode_t;
+
+  localparam bit [WIDTH-1:0] POS_1 = 'd1;
+
+
+  function logic [WIDTH-1:0] signed_division(input logic [WIDTH-1:0] dividend, input logic [WIDTH-1:0] divisor);
+    logic [WIDTH-1:0] dividend_unsigned, divisor_unsigned, quotient;
+    dividend_unsigned = dividend[WIDTH-1] ? ~dividend + POS_1 : dividend;
+    divisor_unsigned = divisor[WIDTH-1] ? ~divisor + POS_1 : divisor;
+    quotient = dividend_unsigned / divisor_unsigned;
+    quotient = dividend[WIDTH-1] ^ divisor[WIDTH-1] ? ~quotient + POS_1 : quotient;
+    return quotient;
+  endfunction
+
+
+  function logic [WIDTH-1:0] signed_remainder(input logic [WIDTH-1:0] dividend, input logic [WIDTH-1:0] divisor);
+    logic [WIDTH-1:0] dividend_unsigned, divisor_unsigned, remainder;
+    dividend_unsigned = dividend[WIDTH-1] ? ~dividend + POS_1 : dividend;
+    divisor_unsigned = divisor[WIDTH-1] ? ~divisor + POS_1 : divisor;
+    remainder = dividend_unsigned % divisor_unsigned;
+    remainder = dividend[WIDTH-1] ? ~remainder + POS_1 : remainder;
+    return remainder;
+  endfunction
+
+
+  sequence reset_sequence;
+    (rst_ni == 1'b0);
+  endsequence
+
+
+  sequence t_finish;
+    await(t, serdiv_sc.out_vld_o == 1'b1, WIDTH+2);
+  endsequence
+
+/*
+  property label_c;
+    (serdiv_sc.op_a_label_i == 1'b0) && (serdiv_sc.op_b_label_i == 1'b0);
+  endproperty
+  label_c_a: assume property (label_c);
+*/
+
+  property reset_p;
+    reset_sequence
+    |=>
+    t ##0 (serdiv_sc.state_q == IDLE) and
+
+    t ##0 (serdiv_sc.in_rdy_o  == (!serdiv_sc.flush_i && !serdiv_sc.in_vld_i)) and
+    t ##0 (serdiv_sc.out_vld_o == 1'b0);
+  endproperty
+  reset_p_a: assert property (reset_p);
+
+
+  property flush_p;
+    t ##0 (serdiv_sc.flush_i == 1'b1)
+  implies
+    t ##1 (serdiv_sc.state_q == IDLE) and
+
+    t ##0 (serdiv_sc.in_rdy_o  == 1'b0) and
+    t ##0 (serdiv_sc.out_vld_o == 1'b0);
+  endproperty
+  flush_p_a: assert property (disable iff (!rst_ni) flush_p);
+
+
+  property idle_p;
+    t ##0 (serdiv_sc.state_q == IDLE) and
+    t ##0 (serdiv_sc.flush_i == 1'b0) and
+    t ##0 (serdiv_sc.in_vld_i == 1'b0)
+  implies
+    t ##1 (serdiv_sc.state_q == IDLE) and
+
+    t ##0 (serdiv_sc.in_rdy_o  == 1'b1) and
+    t ##0 (serdiv_sc.out_vld_o == 1'b0);
+  endproperty
+  idle_p_a: assert property (disable iff (!rst_ni) idle_p);
+
+
+  /* 
+   * Unsigned Division
+   */
+  property udiv_p;
+  logic [WIDTH-1:0] op_a, op_b;
+  logic [TRANS_ID_BITS-1:0] id;
+  logic op_a_label, op_b_label;
+  logic out_rdy;
+    t ##0 (serdiv_sc.state_q == IDLE) and
+    during(t, t_finish, serdiv_sc.flush_i == 1'b0) and
+    t ##0 (serdiv_sc.in_vld_i == 1'b1) and
+    t ##0 (serdiv_sc.opcode_i == UDIV) and
+
+    t ##0 set_freeze(op_a, serdiv_sc.op_a_i) and
+    t ##0 set_freeze(op_b, serdiv_sc.op_b_i) and
+    t ##0 set_freeze(id, serdiv_sc.id_i) and
+    t ##0 set_freeze(op_a_label, serdiv_sc.op_a_label_i) and
+    t ##0 set_freeze(op_b_label, serdiv_sc.op_b_label_i) and
+    t_finish ##0 set_freeze(out_rdy, serdiv_sc.out_rdy_i)
+
+  implies
+
+    t_finish ##1 (serdiv_sc.state_q == (out_rdy ? IDLE : FINISH)) and
+
+    during(t, t_finish, serdiv_sc.in_rdy_o == 1'b0) and
+
+    during_o(t, 0, t_finish, -1, serdiv_sc.out_vld_o == 1'b0) and
+    t_finish ##0 (serdiv_sc.out_vld_o == 1'b1) and
+
+    t_finish ##0 (serdiv_sc.id_o == id) and
+    t_finish ##0 (serdiv_sc.res_o == (op_b == '0 ? '1 : op_a / op_b)) and
+
+    t_finish ##0 (serdiv_sc.res_label_o == op_a_label | op_b_label);
+  endproperty
+  udiv_p_a: assert property (disable iff (!rst_ni) udiv_p);
+
+
+  /* 
+   * Signed Division
+   */
+  property div_p;
+  logic [WIDTH-1:0] op_a, op_b;
+  logic [TRANS_ID_BITS-1:0] id;
+  logic op_a_label, op_b_label;
+  logic out_rdy;
+    t ##0 (serdiv_sc.state_q == IDLE) and
+    during(t, t_finish, serdiv_sc.flush_i == 1'b0) and
+    t ##0 (serdiv_sc.in_vld_i == 1'b1) and
+    t ##0 (serdiv_sc.opcode_i == DIV) and
+
+    t ##0 set_freeze(op_a, serdiv_sc.op_a_i) and
+    t ##0 set_freeze(op_b, serdiv_sc.op_b_i) and
+    t ##0 set_freeze(id, serdiv_sc.id_i) and
+    t ##0 set_freeze(op_a_label, serdiv_sc.op_a_label_i) and
+    t ##0 set_freeze(op_b_label, serdiv_sc.op_b_label_i) and
+    t_finish ##0 set_freeze(out_rdy, serdiv_sc.out_rdy_i)
+
+  implies
+
+    t_finish ##1 (serdiv_sc.state_q == (out_rdy ? IDLE : FINISH)) and
+
+    during(t, t_finish, serdiv_sc.in_rdy_o == 1'b0) and
+
+    during_o(t, 0, t_finish, -1, serdiv_sc.out_vld_o == 1'b0) and
+    t_finish ##0 (serdiv_sc.out_vld_o == 1'b1) and
+
+    t_finish ##0 (serdiv_sc.id_o == id) and
+    t_finish ##0 (serdiv_sc.res_o == (op_b == '0 ? '1 : signed_division(op_a, op_b))) and
+
+    t_finish ##0 (serdiv_sc.res_label_o == op_a_label | op_b_label);
+  endproperty
+  div_p_a: assert property (disable iff (!rst_ni) div_p);
+
+
+  /* 
+   * Unsigned Remainder
+   */
+  property urem_p;
+  logic [WIDTH-1:0] op_a, op_b;
+  logic [TRANS_ID_BITS-1:0] id;
+  logic op_a_label, op_b_label;
+  logic out_rdy;
+    t ##0 (serdiv_sc.state_q == IDLE) and
+    during(t, t_finish, serdiv_sc.flush_i == 1'b0) and
+    t ##0 (serdiv_sc.in_vld_i == 1'b1) and
+    t ##0 (serdiv_sc.opcode_i == UREM) and
+
+    t ##0 set_freeze(op_a, serdiv_sc.op_a_i) and
+    t ##0 set_freeze(op_b, serdiv_sc.op_b_i) and
+    t ##0 set_freeze(id, serdiv_sc.id_i) and
+    t ##0 set_freeze(op_a_label, serdiv_sc.op_a_label_i) and
+    t ##0 set_freeze(op_b_label, serdiv_sc.op_b_label_i) and
+    t_finish ##0 set_freeze(out_rdy, serdiv_sc.out_rdy_i)
+
+  implies
+
+    t_finish ##1 (serdiv_sc.state_q == (out_rdy ? IDLE : FINISH)) and
+
+    during(t, t_finish, serdiv_sc.in_rdy_o == 1'b0) and
+
+    during_o(t, 0, t_finish, -1, serdiv_sc.out_vld_o == 1'b0) and
+    t_finish ##0 (serdiv_sc.out_vld_o == 1'b1) and
+
+    t_finish ##0 (serdiv_sc.id_o == id) and
+    t_finish ##0 (serdiv_sc.res_o == (op_b == '0 ? op_a : op_a % op_b)) and
+
+    t_finish ##0 (serdiv_sc.res_label_o == op_a_label | op_b_label);
+  endproperty
+  urem_p_a: assert property (disable iff (!rst_ni) urem_p);
+
+
+  /* 
+   * Signed Remainder
+   */
+  property rem_p;
+  logic [WIDTH-1:0] op_a, op_b;
+  logic [TRANS_ID_BITS-1:0] id;
+  logic op_a_label, op_b_label;
+  logic out_rdy;
+    t ##0 (serdiv_sc.state_q == IDLE) and
+    during(t, t_finish, serdiv_sc.flush_i == 1'b0) and
+    t ##0 (serdiv_sc.in_vld_i == 1'b1) and
+    t ##0 (serdiv_sc.opcode_i == REM) and
+
+    t ##0 set_freeze(op_a, serdiv_sc.op_a_i) and
+    t ##0 set_freeze(op_b, serdiv_sc.op_b_i) and
+    t ##0 set_freeze(id, serdiv_sc.id_i) and
+    t ##0 set_freeze(op_a_label, serdiv_sc.op_a_label_i) and
+    t ##0 set_freeze(op_b_label, serdiv_sc.op_b_label_i) and
+    t_finish ##0 set_freeze(out_rdy, serdiv_sc.out_rdy_i)
+
+  implies
+
+    t_finish ##1 (serdiv_sc.state_q == (out_rdy ? IDLE : FINISH)) and
+
+    during(t, t_finish, serdiv_sc.in_rdy_o == 1'b0) and
+
+    during_o(t, 0, t_finish, -1, serdiv_sc.out_vld_o == 1'b0) and
+    t_finish ##0 (serdiv_sc.out_vld_o == 1'b1) and
+
+    t_finish ##0 (serdiv_sc.id_o == id) and
+    t_finish ##0 (serdiv_sc.res_o == (op_b == '0 ? op_a : signed_remainder(op_a, op_b))) and
+
+    t_finish ##0 (serdiv_sc.res_label_o == op_a_label | op_b_label);
+  endproperty
+  rem_p_a: assert property (disable iff (!rst_ni) rem_p);
+
+
+  property finish_wait_p;
+    t ##0 (serdiv_sc.state_q == FINISH) and
+    during_o(t, 0, t, 1, serdiv_sc.flush_i == 1'b0) and
+    t ##0 (serdiv_sc.out_rdy_i == 1'b0)
+  implies
+    t ##1 (serdiv_sc.state_q == FINISH) and
+
+    t ##1 (serdiv_sc.in_rdy_o  == 1'b0) and
+    t ##1 (serdiv_sc.out_vld_o == 1'b1) and
+    t ##1 (serdiv_sc.id_o      == $past(serdiv_sc.id_o)) and
+    t ##1 (serdiv_sc.res_o     == $past(serdiv_sc.res_o));
+  endproperty
+  finish_wait_p_a: assert property (disable iff (!rst_ni) finish_wait_p);
+
+
+  property finish_out_rdy_p;
+    t ##0 (serdiv_sc.state_q == FINISH) and
+    t ##0 (serdiv_sc.flush_i == 1'b0) and
+    t ##0 (serdiv_sc.out_rdy_i == 1'b1)
+  implies
+    t ##1 (serdiv_sc.state_q == IDLE) and
+
+    t ##0 (serdiv_sc.in_rdy_o  == 1'b0) and
+    t ##0 (serdiv_sc.out_vld_o == 1'b1) and
+    t ##1 (serdiv_sc.id_o      == $past(serdiv_sc.id_o)) and
+    t ##1 (serdiv_sc.res_o     == $past(serdiv_sc.res_o));
+  endproperty
+  finish_out_rdy_p_a: assert property (disable iff (!rst_ni) finish_out_rdy_p);
+
+`end_tda
+
+endmodule
+
+bind serdiv_sc property_checker #(.WIDTH(WIDTH)) checker_bind(.clk_i(clk_i), .rst_ni(rst_ni));
