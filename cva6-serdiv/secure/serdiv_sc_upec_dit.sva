@@ -1,0 +1,82 @@
+module property_checker
+  (
+  input clk,
+  input rst
+  );
+
+  default clocking default_clk @(posedge clk); endclocking
+
+  `include "tidal.sv"
+
+`begin_tda(ops)
+
+  enum logic [1:0] {IDLE, DIVIDE, WAIT, FINISH} state_t;
+
+  sequence reset_sequence;
+    (rst == 1'b0);
+  endsequence
+
+  // ---------------
+  // - Functions -
+  // ---------------
+
+  function automatic Control_Equivalence();
+  Control_Equivalence = (
+    (U1.cnt_dummy_q    == U2.cnt_dummy_q   ) &&
+    (U1.id_q           == U2.id_q          ) &&
+    (U1.op_a_label_q   == U2.op_a_label_q  ) &&
+    (U1.op_b_label_q   == U2.op_b_label_q  ) &&
+    (U1.rem_sel_q      == U2.rem_sel_q     )
+  );
+  endfunction
+
+
+  function automatic Control_Output_Equivalence();
+    Control_Output_Equivalence = (
+      (U1.in_rdy_o  == U2.in_rdy_o ) &&
+      (U1.out_vld_o == U2.out_vld_o) &&
+      (U1.id_o      == U2.id_o     )     // Not really control, but irrelevant for this proof
+    );
+  endfunction
+
+
+  // ---------------
+  // - Constraints -
+  // ---------------
+
+  property label_c;
+    (U1.op_a_label_i == U2.op_a_label_i) &&
+    (U1.op_b_label_i == U2.op_b_label_i) &&
+    ((U1.op_a_label_i == 1'b1) || (U1.op_a_i == U2.op_a_i)) &&
+    ((U1.op_b_label_i == 1'b1) || (U1.op_b_i == U2.op_b_i));
+  endproperty
+  label_c_a: assume property (label_c);
+
+
+  // ------------------------------------
+  // - UPEC for Data-Independent Timing -
+  // ------------------------------------
+
+  property reset_p;
+    reset_sequence
+    |=>
+    t ##0 Control_Equivalence() and
+    t ##0 Control_Output_Equivalence();
+  endproperty
+  reset_p_a: assert property (reset_p);
+
+
+  property upec_dit_p;
+    t ##0 Control_Equivalence()
+  implies
+    t ##1 Control_Equivalence() and
+    t ##1 Control_Output_Equivalence();
+  endproperty
+  upec_dit_p_a: assert property (disable iff (!rst) upec_dit_p);
+
+
+`end_tda
+
+endmodule
+
+bind serdiv_sc_miter property_checker checker_bind(.clk(clk), .rst(rst));

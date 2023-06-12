@@ -10,8 +10,9 @@ read_verilog -golden  -pragma_ignore {}  -version sv2012 {$script_path/../common
 read_verilog -golden  -pragma_ignore {}  -version sv2012 {$script_path/../common/cv64a6_imafdc_sv39_config_pkg.sv}
 read_verilog -golden  -pragma_ignore {}  -version sv2012 {$script_path/../common/lzc.sv}
 read_verilog -golden  -pragma_ignore {}  -version sv2012 {$script_path/serdiv_sc.sv}
+read_verilog -golden  -pragma_ignore {}  -version sv2012 {$script_path/serdiv_sc_miter.sv}
 
-set_elaborate_option -golden -verilog_parameter {WIDTH=8}
+#set_elaborate_option -golden -verilog_parameter {WIDTH=64}
 
 elaborate -golden
 
@@ -19,6 +20,6 @@ compile -golden
 
 set_mode mv
 
-read_sva -version {sv2012} {$script_path/serdiv.sva}
+read_sva -version {sv2012} {$script_path/serdiv_sc_upec_dit.sva}
 
 check -all [get_checks]

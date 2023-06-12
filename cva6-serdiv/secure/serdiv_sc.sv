@@ -44,13 +44,14 @@ module serdiv_sc import ariane_pkg::*; #(
 // signal declarations
 /////////////////////////////////////
 
-  enum logic [1:0] {IDLE, DIVIDE, FINISH} state_d, state_q;
+  enum logic [1:0] {IDLE, DIVIDE, WAIT, FINISH} state_d, state_q;
 
   logic [WIDTH-1:0]       res_q, res_d;
   logic [WIDTH-1:0]       op_a_q, op_a_d;
   logic [WIDTH-1:0]       op_b_q, op_b_d;
   logic                   op_a_sign, op_b_sign;
   logic                   op_b_zero, op_b_zero_q, op_b_zero_d;
+  logic                   op_b_neg_one, op_b_neg_one_q, op_b_neg_one_d;
 
   logic [TRANS_ID_BITS-1:0] id_q, id_d;
 
@@ -64,7 +65,7 @@ module serdiv_sc import ariane_pkg::*; #(
   logic [WIDTH-1:0] b_mux;
   logic [WIDTH-1:0] out_mux;
 
-  logic [$clog2(WIDTH+1)-1:0] cnt_q, cnt_d;
+  logic [$clog2(WIDTH)-1:0] cnt_q, cnt_d;
   logic cnt_zero;
 
   logic [WIDTH-1:0] lzc_a_input, lzc_b_input, op_b;
@@ -75,9 +76,13 @@ module serdiv_sc import ariane_pkg::*; #(
   logic a_reg_en, b_reg_en, res_reg_en, ab_comp, pm_sel, load_en;
   logic lzc_a_no_one, lzc_b_no_one;
   logic div_res_zero_d, div_res_zero_q;
+  logic fast_path;
 
   logic op_a_label_q, op_a_label_d;
   logic op_b_label_q, op_b_label_d;
+
+  logic [$clog2(WIDTH)-1:0] cnt_dummy_q, cnt_dummy_d;
+  logic cnt_dummy_zero;
 
 
 /////////////////////////////////////
@@ -86,12 +91,13 @@ module serdiv_sc import ariane_pkg::*; #(
 /////////////////////////////////////
 
   assign op_b_zero = (op_b_i == 0);
+  assign op_b_neg_one = (op_b_i == '1) && opcode_i[0];
+  assign fast_path = div_res_zero_q | op_b_zero_q | op_b_neg_one_q;
   assign op_a_sign = op_a_i[$high(op_a_i)];
   assign op_b_sign = op_b_i[$high(op_b_i)];
 
   assign lzc_a_input = (opcode_i[0] & op_a_sign) ? {~op_a_i[$high(op_a_i)-1:0], 1'b1} : op_a_i; 
-  // This change in lzc_a_input equation helps to fix erronous results for DIV and REM for -1/1.
-  assign lzc_b_input = (opcode_i[0] & op_b_sign) ? ~op_b_i         : op_b_i;
+  assign lzc_b_input = (opcode_i[0] & op_b_sign) ? ~op_b_i                            : op_b_i;
 
   lzc #(
     .MODE    ( 1          ), // count leading zeros
@@ -112,12 +118,12 @@ module serdiv_sc import ariane_pkg::*; #(
   );
 
   assign shift_a      = (lzc_a_no_one) ? WIDTH : lzc_a_result;
-  assign div_shift    = (lzc_b_no_one) ? WIDTH : lzc_b_result-shift_a;
+  assign div_shift    = lzc_b_result - shift_a;
 
   assign op_b         = op_b_i <<< $unsigned(div_shift);
 
   // the division is zero if |opB| > |opA| and can be terminated
-  assign div_res_zero_d = (load_en) ? ($signed(div_shift) < 0) : div_res_zero_q;
+  assign div_res_zero_d = (load_en) ? div_shift[$high(div_shift)] : div_res_zero_q;
 
 /////////////////////////////////////
 // Datapath
@@ -132,8 +138,7 @@ module serdiv_sc import ariane_pkg::*; #(
   assign b_mux       = (load_en)   ? op_b : {comp_inv_q, (op_b_q[$high(op_b_q):1])};
 
   // in case of bad timing, we could output from regs -> needs a cycle more in the FSM
-  assign out_mux     = (rem_sel_q) ? op_a_q : res_q;
-  // assign out_mux     = (rem_sel_q) ? op_a_d : res_d;
+  assign out_mux     = (rem_sel_q) ? (op_b_neg_one_q ? '0 : op_a_q) : (op_b_zero_q ? '1 : (op_b_neg_one_q ? -$signed(op_a_q) : res_q));
 
   // invert if necessary
   assign res_o       = (res_inv_q) ? -$signed(out_mux) : out_mux;
@@ -152,6 +157,14 @@ module serdiv_sc import ariane_pkg::*; #(
   assign cnt_zero = (cnt_q == 0);
   assign cnt_d    = (load_en)   ? div_shift  :
                     (~cnt_zero) ? cnt_q - 1  : cnt_q;
+
+  assign cnt_dummy_zero = (cnt_dummy_q == 0);
+  assign cnt_dummy_d    = (load_en & op_a_label_i & op_b_label_i) ? WIDTH-1           :
+                          (load_en & op_a_label_i)                ? lzc_b_result      :
+                          (load_en & op_b_label_i)                ? WIDTH-1 - shift_a :
+                          (load_en)                               ? '0                :
+                          (~cnt_dummy_zero) ? cnt_dummy_q - 1 : cnt_dummy_q;
+
 
   always_comb begin : p_fsm
     // default
@@ -176,21 +189,28 @@ module serdiv_sc import ariane_pkg::*; #(
         end
       end
       DIVIDE: begin
-        if(~div_res_zero_q) begin
+        if (~fast_path) begin
           a_reg_en     = ab_comp;
           b_reg_en     = 1'b1;
           res_reg_en   = 1'b1;
         end
-        // can end the division now if the result is clearly 0
-        if(div_res_zero_q) begin
+        // can end the division immediately if the result is known
+        if (fast_path & ~op_a_label_q & ~op_b_label_q) begin
           out_vld_o = 1'b1;
           state_d   = FINISH;
           if(out_rdy_i) begin
             // in_rdy_o = 1'b1;// there is a cycle delay until the valid signal is asserted by the id stage
             state_d  = IDLE;
           end
+        end else if ((fast_path | cnt_zero) & cnt_dummy_zero) begin
+          state_d = FINISH;
         end else if (cnt_zero) begin
-          state_d   = FINISH;
+          state_d = WAIT;
+        end
+      end
+      WAIT: begin
+        if (cnt_dummy_zero) begin
+          state_d = FINISH;
         end
       end
       FINISH: begin
@@ -219,10 +239,11 @@ module serdiv_sc import ariane_pkg::*; #(
 /////////////////////////////////////
 
   // get flags
-  assign rem_sel_d    = (load_en) ? opcode_i[1]               : rem_sel_q;
-  assign comp_inv_d   = (load_en) ? opcode_i[0] & op_b_sign   : comp_inv_q;
-  assign op_b_zero_d  = (load_en) ? op_b_zero                 : op_b_zero_q;
-  assign res_inv_d    = (load_en) ? (~op_b_zero | opcode_i[1]) & opcode_i[0] & (op_a_sign ^ op_b_sign) : res_inv_q;
+  assign rem_sel_d      = (load_en) ? opcode_i[1]               : rem_sel_q;
+  assign comp_inv_d     = (load_en) ? opcode_i[0] & op_b_sign   : comp_inv_q;
+  assign op_b_zero_d    = (load_en) ? op_b_zero                 : op_b_zero_q;
+  assign op_b_neg_one_d = (load_en) ? op_b_neg_one              : op_b_neg_one_q;
+  assign res_inv_d      = (load_en) ? (~op_b_zero | opcode_i[1]) & opcode_i[0] & (op_a_sign ^ op_b_sign) : res_inv_q;
 
   // transaction id
   assign id_d = (load_en) ? id_i : id_q;
@@ -254,9 +275,11 @@ module serdiv_sc import ariane_pkg::*; #(
       comp_inv_q     <= 1'b0;
       res_inv_q      <= 1'b0;
       op_b_zero_q    <= 1'b0;
+      op_b_neg_one_q <= 1'b0;
       div_res_zero_q <= 1'b0;
       op_a_label_q   <= 1'b0;
       op_b_label_q   <= 1'b0;
+      cnt_dummy_q    <= '0;
     end else begin
       state_q        <= state_d;
       op_a_q         <= op_a_d;
@@ -268,9 +291,11 @@ module serdiv_sc import ariane_pkg::*; #(
       comp_inv_q     <= comp_inv_d;
       res_inv_q      <= res_inv_d;
       op_b_zero_q    <= op_b_zero_d;
+      op_b_neg_one_q <= op_b_neg_one_d;
       div_res_zero_q <= div_res_zero_d;
       op_a_label_q   <= op_a_label_d;
       op_b_label_q   <= op_b_label_d;
+      cnt_dummy_q    <= cnt_dummy_d;
     end
   end
 
