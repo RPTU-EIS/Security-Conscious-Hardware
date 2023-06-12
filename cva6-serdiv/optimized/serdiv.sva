@@ -123,7 +123,7 @@ module property_checker import ariane_pkg::*;
     t_finish ##0 (serdiv.out_vld_o == 1'b1) and
 
     t_finish ##0 (serdiv.id_o == id) and
-    t_finish ##0 (serdiv.res_o == (op_b == '0 ? '1 : op_a / op_b));
+    t_finish ##0 (serdiv.res_o == op_a / op_b);
   endproperty
   udiv_normal_p_a: assert property (disable iff (!rst_ni) udiv_normal_p);
 
@@ -227,7 +227,7 @@ module property_checker import ariane_pkg::*;
     t_finish ##0 (serdiv.out_vld_o == 1'b1) and
 
     t_finish ##0 (serdiv.id_o == id) and
-    t_finish ##0 (serdiv.res_o == (op_b == '0 ? '1 : signed_division(op_a, op_b)));
+    t_finish ##0 (serdiv.res_o == signed_division(op_a, op_b));
   endproperty
   div_normal_p_a: assert property (disable iff (!rst_ni) div_normal_p);
 
@@ -366,7 +366,7 @@ module property_checker import ariane_pkg::*;
     t_finish ##0 (serdiv.out_vld_o == 1'b1) and
 
     t_finish ##0 (serdiv.id_o == id) and
-    t_finish ##0 (serdiv.res_o == (op_b == '0 ? op_a : op_a % op_b));
+    t_finish ##0 (serdiv.res_o == op_a % op_b);
   endproperty
   urem_normal_p_a: assert property (disable iff (!rst_ni) urem_normal_p);
 
@@ -474,7 +474,7 @@ module property_checker import ariane_pkg::*;
     t_finish ##0 (serdiv.out_vld_o == 1'b1) and
 
     t_finish ##0 (serdiv.id_o == id) and
-    t_finish ##0 (serdiv.res_o == (op_b == '0 ? op_a : signed_remainder(op_a, op_b)));
+    t_finish ##0 (serdiv.res_o == signed_remainder(op_a, op_b));
   endproperty
   rem_normal_p_a: assert property (disable iff (!rst_ni) rem_normal_p);
 
