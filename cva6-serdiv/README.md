@@ -1,6 +1,6 @@
 # CVA6 Serial Division Unit
 
-Original Repository (accessed 31/05/2023):  
+Original Repository (accessed 31/05/2023 - updated 16/06/2023):  
 https://github.com/openhwgroup/cva6
 
 The serial division module features four different types of operation:  
@@ -50,7 +50,8 @@ A divisor of 0 or -1 causes the input of the leading zero counter to be 0, which
 
 In a security-conscious design, the worst-case operand-dependent latency dictates the performance.  
 This means that, in the original design, whenever b is confidential, the worst-case latency (WIDTH+2) must be assumed.  
-As a consequence, we have optimized the design by adding fast paths to handle these cases.
+As a consequence, we have optimized the design by adding fast paths to handle these cases.  
+These changes were contributed to the CVA6 project and merged on June 16th 2023.
 
 
 ## Timing Behavior (Security-Conscious Design)

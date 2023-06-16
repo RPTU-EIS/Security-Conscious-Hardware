@@ -90,11 +90,11 @@ module serdiv_sc import ariane_pkg::*; #(
 // for faster division
 /////////////////////////////////////
 
-  assign op_b_zero = (op_b_i == 0);
-  assign op_b_neg_one = (op_b_i == '1) && opcode_i[0];
-  assign fast_path = div_res_zero_q | op_b_zero_q | op_b_neg_one_q;
   assign op_a_sign = op_a_i[$high(op_a_i)];
   assign op_b_sign = op_b_i[$high(op_b_i)];
+  assign op_b_zero    = lzc_b_no_one & ~op_b_sign;
+  assign op_b_neg_one = lzc_b_no_one &  op_b_sign;
+  assign fast_path = div_res_zero_q | op_b_zero_q | op_b_neg_one_q;
 
   assign lzc_a_input = (opcode_i[0] & op_a_sign) ? {~op_a_i[$high(op_a_i)-1:0], 1'b1} : op_a_i; 
   assign lzc_b_input = (opcode_i[0] & op_b_sign) ? ~op_b_i                            : op_b_i;
@@ -138,7 +138,7 @@ module serdiv_sc import ariane_pkg::*; #(
   assign b_mux       = (load_en)   ? op_b : {comp_inv_q, (op_b_q[$high(op_b_q):1])};
 
   // in case of bad timing, we could output from regs -> needs a cycle more in the FSM
-  assign out_mux     = (rem_sel_q) ? (op_b_neg_one_q ? '0 : op_a_q) : (op_b_zero_q ? '1 : (op_b_neg_one_q ? -$signed(op_a_q) : res_q));
+  assign out_mux     = (rem_sel_q) ? (op_b_neg_one_q ? '0 : op_a_q) : (op_b_zero_q ? '1 : (op_b_neg_one_q ? op_a_q : res_q));
 
   // invert if necessary
   assign res_o       = (res_inv_q) ? -$signed(out_mux) : out_mux;
@@ -243,7 +243,7 @@ module serdiv_sc import ariane_pkg::*; #(
   assign comp_inv_d     = (load_en) ? opcode_i[0] & op_b_sign   : comp_inv_q;
   assign op_b_zero_d    = (load_en) ? op_b_zero                 : op_b_zero_q;
   assign op_b_neg_one_d = (load_en) ? op_b_neg_one              : op_b_neg_one_q;
-  assign res_inv_d      = (load_en) ? (~op_b_zero | opcode_i[1]) & opcode_i[0] & (op_a_sign ^ op_b_sign) : res_inv_q;
+  assign res_inv_d      = (load_en) ? (~op_b_zero | opcode_i[1]) & opcode_i[0] & (op_a_sign ^ op_b_sign ^ op_b_neg_one) : res_inv_q;
 
   // transaction id
   assign id_d = (load_en) ? id_i : id_q;
