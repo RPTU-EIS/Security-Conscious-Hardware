@@ -16,18 +16,19 @@ module property_checker
     (rst == 1'b0);
   endsequence
 
+
   // ---------------
   // - Functions -
   // ---------------
 
   function automatic Control_Equivalence();
-  Control_Equivalence = (
-    (U1.cnt_dummy_q    == U2.cnt_dummy_q   ) &&
-    (U1.id_q           == U2.id_q          ) &&
-    (U1.op_a_label_q   == U2.op_a_label_q  ) &&
-    (U1.op_b_label_q   == U2.op_b_label_q  ) &&
-    (U1.rem_sel_q      == U2.rem_sel_q     )
-  );
+    Control_Equivalence = (
+      (U1.cnt_dummy_q    == U2.cnt_dummy_q   ) &&
+      (U1.id_q           == U2.id_q          ) &&
+      (U1.op_a_label_q   == U2.op_a_label_q  ) &&
+      (U1.op_b_label_q   == U2.op_b_label_q  ) &&
+      (U1.rem_sel_q      == U2.rem_sel_q     )
+    );
   endfunction
 
 
@@ -35,7 +36,15 @@ module property_checker
     Control_Output_Equivalence = (
       (U1.in_rdy_o  == U2.in_rdy_o ) &&
       (U1.out_vld_o == U2.out_vld_o) &&
-      (U1.id_o      == U2.id_o     )     // Not really control, but irrelevant for this proof
+      (U1.id_o      == U2.id_o     )
+    );
+  endfunction
+
+
+  function automatic Data_Output_Secure();
+    Data_Output_Secure = (
+      (U1.res_label_o == U2.res_label_o) &&
+      (U1.res_label_o || (U1.res_o == U2.res_o))
     );
   endfunction
 
@@ -47,10 +56,36 @@ module property_checker
   property label_c;
     (U1.op_a_label_i == U2.op_a_label_i) &&
     (U1.op_b_label_i == U2.op_b_label_i) &&
-    ((U1.op_a_label_i == 1'b1) || (U1.op_a_i == U2.op_a_i)) &&
-    ((U1.op_b_label_i == 1'b1) || (U1.op_b_i == U2.op_b_i));
+    (U1.op_a_label_i || (U1.op_a_i == U2.op_a_i)) &&
+    (U1.op_b_label_i || (U1.op_b_i == U2.op_b_i));
   endproperty
   label_c_a: assume property (label_c);
+
+
+  // --------------
+  // - Invariants -
+  // --------------
+
+  function Invariant();
+    Invariant = (
+      (U1.op_a_label_q || U1.op_b_label_q || 
+      (U1.op_a_q         == U2.op_a_q        )  && 
+      (U1.op_b_q         == U2.op_b_q        )  &&
+      (U1.res_q          == U2.res_q         )  &&
+      (U1.cnt_q          == U2.cnt_q         )  &&
+      (U1.comp_inv_q     == U2.comp_inv_q    )  &&
+      (U1.div_res_zero_q == U2.div_res_zero_q)  &&
+      (U1.op_b_neg_one_q == U2.op_b_neg_one_q)  &&
+      (U1.op_b_zero_q    == U2.op_b_zero_q   )  &&
+      (U1.res_inv_q      == U2.res_inv_q     )  &&
+      (U1.state_q        == U2.state_q       )
+      ) &&
+      ((U1.state_q == IDLE  ) == (U2.state_q == IDLE  )) &&
+      ((U1.state_q == FINISH) == (U2.state_q == FINISH)) &&
+      ((U1.op_a_label_q || U1.op_b_label_q) ? ((U1.cnt_dummy_q >= U1.cnt_q) || U1.div_res_zero_q) : 1'b1) &&
+      ((U2.op_a_label_q || U2.op_b_label_q) ? ((U2.cnt_dummy_q >= U2.cnt_q) || U2.div_res_zero_q) : 1'b1)
+    );
+  endfunction
 
 
   // ------------------------------------
@@ -60,6 +95,8 @@ module property_checker
   property reset_p;
     reset_sequence
     |=>
+    t ##0 Invariant() and
+    t ##0 Data_Output_Secure() and
     t ##0 Control_Equivalence() and
     t ##0 Control_Output_Equivalence();
   endproperty
@@ -67,8 +104,11 @@ module property_checker
 
 
   property upec_dit_p;
+    t ##0 Invariant() and
     t ##0 Control_Equivalence()
   implies
+    t ##1 Invariant() and
+    t ##1 Data_Output_Secure() and
     t ##1 Control_Equivalence() and
     t ##1 Control_Output_Equivalence();
   endproperty
