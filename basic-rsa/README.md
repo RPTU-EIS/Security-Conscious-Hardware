@@ -21,6 +21,7 @@ The following notation is used:
  - The *WIDTH* parameter specifies the width of the operands.  
  - The *lzc* function returns the number of leading zeros.  
 
+
 ## Timing Behavior (Original Design)
 
 | Module    | Min. Latency | Latency                 | Max. Latency            |
@@ -39,3 +40,18 @@ Therefore, the maximum number of clock cycles is:
     Max. Latency = WIDTH * (WIDTH+2) + (WIDTH-1) + 2 = WIDTH^2 + 3 * WIDTH + 1
 
 These latencies have been confirmed with formal verificaiton. 
+
+
+## Timing Behavior (Optimized Design)
+
+| Module    | Min. Latency | Latency                                                        | Max. Latency            |
+|-----------|--------------|----------------------------------------------------------------|-------------------------|
+| modmult   | 2            | WIDTH + 1 - max{lzc(mpand[WIDTH-1:1]), lzc(mplier[WIDTH-1:1])} | WIDTH + 1               |
+| rsacypher | 4            | -                                                              | WIDTH^2 + 2 * WIDTH + 1 |
+
+Two changes have been done in the modmult design:
+ - The latency now depends on the smaller operand instead of the mplier alone. 
+ - The result is already available one cycle earlier, except for when one operand is 0. \
+   Therefore, we now stop the operation as soon as the value of the shifted register is 0 **or 1**, reducing the average and maximum latency by one cycle. 
+
+These changes also reduce the minimum and maximum latency of the rsacypher module by one cycle per required operation.

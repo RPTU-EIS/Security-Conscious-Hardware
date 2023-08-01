@@ -49,7 +49,7 @@ module property_checker
 
   /*
    * Regular modular multiplication if (modulus > mpand) && (modulus > mplier)
-   * This operation takes 1 + MPWID - max{lzc(mpand), lzc(mplier)} clock cycles
+   * This operation takes 1 + MPWID - max{lzc(mpand[WIDTH-1:1]), lzc(mplier[WIDTH-1:1])} clock cycles
    * The constraint is formulated according to the specification
    */
   property modmult_p;
@@ -73,7 +73,7 @@ module property_checker
 
   /*
    * Unconstrained modular multiplication
-   * This operation takes 1 + MPWID - max{lzc(mpand), lzc(mplier)} clock cycles
+   * This operation takes 1 + MPWID - max{lzc(mpand[WIDTH-1:1]), lzc(mplier[WIDTH-1:1])} clock cycles
    * In case (modulus <= mpand) or (modulus <= mplier), this produces a wrong result
    */
   property modmult_general_p;
