@@ -39,7 +39,7 @@ module property_checker
 
 
   sequence t_finish;
-    await_o(t, 5, rsacypher.done == 1'b1, 2 + KEYSIZE * (KEYSIZE + 2) + (KEYSIZE - 1) - 5);
+    await_o(t, 4, rsacypher.done == 1'b1, 2 + KEYSIZE * (KEYSIZE + 1) + (KEYSIZE - 1) - 4);
   endsequence
 
 
@@ -74,13 +74,13 @@ module property_checker
    * Regular modular exponentiaiton if indata < inMod
    * This constraint is according to the specification (but does not influence the best or worst case latency)
    * The latency for KEYSIZE = 4 is as follows:
-   *  - Best case: 5 clock cycles (1**0%2)
-   *    1 cycle setup + 3 cycle modmult operation (mplier = 1) + 1 cycle output forwarding
-   *  - Worst case: 29 clock cycles (8**12%14)
-   *    1 cycle setup + 4 * 6 cycle modmult operations + 3 * 1 cycle overhead between operations + 1 cycle output forwarding
+   *  - Best case: 4 clock cycles (0**1%8)
+   *    1 cycle setup + 2 cycle modmult operation (mplier = 1) + 1 cycle output forwarding
+   *  - Worst case: 25 clock cycles (9**9%12)
+   *    1 cycle setup + 4 * 5 cycle modmult operations + 3 * 1 cycle overhead between operations + 1 cycle output forwarding
    *  In general: 
-   *  - Best case: 5 clock cycles
-   *  - Worst case: KEYSIZE**2 + 3 * KEYSIZE + 1
+   *  - Best case: 4 clock cycles
+   *  - Worst case: KEYSIZE**2 + 2 * KEYSIZE + 1
    */
   property modexp_p;
   logic [KEYSIZE-1:0] b, e, m;
