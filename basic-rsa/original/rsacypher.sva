@@ -1,0 +1,109 @@
+// @lang=sva @ts=8
+
+module property_checker
+  // Adjust this parameter before elaboration with
+  // set_elaborate_option -golden -vhdl_generic {keysize=4}
+  #(parameter KEYSIZE = 4)
+  (
+  input clk_i,
+  input rst_i
+  );
+
+  default clocking default_clk @(posedge clk_i); endclocking
+
+  `include "tidal.sv"
+
+`begin_tda(ops)
+
+
+  localparam [KEYSIZE-1:0] keysize_zero = '0; 
+
+  function logic [KEYSIZE-1:0] modexp(input logic [KEYSIZE-1:0] b, input logic [KEYSIZE-1:0] e, input logic [KEYSIZE-1:0] m);
+    logic [2*KEYSIZE-1:0] temp_res, square;
+
+    square = {keysize_zero, b};
+    temp_res = 1;
+
+    for (int i = 0; i < KEYSIZE; i++) begin
+      temp_res = e[i] ? (square * temp_res) % {keysize_zero, m} : temp_res;
+      square = (square * square) % {keysize_zero, m};
+    end
+
+    return temp_res;
+  endfunction
+
+
+  sequence reset_sequence;
+    (rst_i == 1'b1);
+  endsequence
+
+
+  sequence t_finish;
+    await_o(t, 5, rsacypher.done == 1'b1, 2 + KEYSIZE * (KEYSIZE + 2) + (KEYSIZE - 1));
+  endsequence
+
+
+  property reset_p;
+    reset_sequence
+    |=>
+    t ##0 (rsacypher.done   == 1'b1) and
+    t ##0 (rsacypher.multgo == 1'b0) and
+    t ##0 (rsacypher.count  ==   '0) and
+    t ##0 (rsacypher.root   ==   '0) and
+    t ##0 (rsacypher.modreg ==   '0) and
+    t ##0 (rsacypher.tempin ==   '0) and
+    t ##0 (rsacypher.sqrin  ==   '0) and
+
+    t ##0 (rsacypher.modmultiply.first == 1'b1) and
+    t ##0 (rsacypher.modsqr.first      == 1'b1);
+  endproperty
+  reset_p_a: assert property (reset_p);
+
+
+  property idle_p;
+    t ##0 (rsacypher.done == 1'b1) and
+    t ##0 (rsacypher.ds   == 1'b0)
+  implies
+    t ##1 (rsacypher.done   == 1'b1) and
+    t ##1 (rsacypher.cypher == $past(rsacypher.cypher));
+  endproperty
+  idle_p_a: assert property (idle_p);
+
+
+  /*
+   * Regular modular exponentiaiton if indata < inMod
+   * This constraint is according to the specification (but does not influence the best or worst case latency)
+   * The latency for KEYSIZE = 4 is as follows:
+   *  - Best case: 5 clock cycles (1**0%2)
+   *    1 cycle setup + 3 cycle modmult operation (mplier = 1) + 1 cycle output forwarding
+   *  - Worst case: 29 clock cycles (8**12%14)
+   *    1 cycle setup + 4 * 6 cycle modmult operations + 3 * 1 cycle overhead between operations + 1 cycle output forwarding
+   *  In general: 
+   *  - Best case: 5 clock cycles
+   *  - Worst case: KEYSIZE**2 + 3 * KEYSIZE + 1
+   */
+  property modexp_p;
+  logic [KEYSIZE-1:0] b, e, m;
+    t ##0 (rsacypher.done == 1'b1) and
+    t ##0 (rsacypher.ds   == 1'b1) and
+    t ##0 (rsacypher.indata < rsacypher.inMod) and
+    t ##0 (rsacypher.indata > 0) || (rsacypher.inExp > 0) and
+
+    t ##0 set_freeze(b, rsacypher.indata) and
+    t ##0 set_freeze(e, rsacypher.inExp ) and
+    t ##0 set_freeze(m, rsacypher.inMod )
+
+  implies
+
+    during_o(t, 1, t_finish, -1, (rsacypher.done == 1'b0)) and
+    t_finish ##0 (rsacypher.done == 1'b1) and
+    t_finish ##0 (rsacypher.cypher == modexp(b, e, m));
+  endproperty
+  modexp_p_a: assert property (disable iff (rst_i) modexp_p);
+
+
+`end_tda
+
+endmodule
+
+bind rsacypher property_checker #(.KEYSIZE(KEYSIZE)) checker_bind(.clk_i(clk), .rst_i(reset));

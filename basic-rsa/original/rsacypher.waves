@@ -1,0 +1,30 @@
+naming_style onespin
+# Name Radix Color Is_Clock
+clk DEFAULT DEFAULT { true} { true}
+reset DEFAULT DEFAULT { false} { false}
+SEPARATOR_Input NONE DEFAULT { false} { false}
+ds DEFAULT DEFAULT { false} { false}
+indata DEC DEFAULT { false} { false}
+inexp DEC DEFAULT { false} { false}
+inmod DEC DEFAULT { false} { true}
+SEPARATOR_Output NONE DEFAULT { false} { false}
+done DEFAULT DEFAULT { false} { false}
+cypher DEFAULT DEFAULT { false} { false}
+SEPARATOR_State NONE DEFAULT { false} { false}
+count DEFAULT DEFAULT { false} { false}
+modreg DEFAULT DEFAULT { false} { false}
+tempin DEFAULT DEFAULT { false} { false}
+sqrin DEFAULT DEFAULT { false} { false}
+root DEFAULT DEFAULT { false} { false}
+SEPARATOR_Square NONE DEFAULT { false} { false}
+modsqr/ready DEFAULT DEFAULT { false} { false}
+modsqr/ds DEFAULT DEFAULT { false} { false}
+modsqr/mpand DEFAULT DEFAULT { false} { false}
+modsqr/mplier DEFAULT DEFAULT { false} { false}
+modsqr/product DEC DEFAULT { false} { false}
+SEPARATOR_Multiply NONE DEFAULT { false} { false}
+modmultiply/ready DEFAULT DEFAULT { false} { false}
+modmultiply/ds DEFAULT DEFAULT { false} { false}
+modmultiply/mpand DEFAULT DEFAULT { false} { false}
+modmultiply/mplier DEFAULT DEFAULT { false} { false}
+modmultiply/product DEC DEFAULT { false} { false}
