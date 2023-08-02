@@ -1,0 +1,100 @@
+// @lang=sva @ts=8
+
+module property_checker
+  // Adjust this parameter before elaboration with
+  // set_elaborate_option -golden -vhdl_generic {mpwid=4}
+  #(parameter MPWID = 4)
+  (
+  input clk_i,
+  input rst_i
+  );
+
+  default clocking default_clk @(posedge clk_i); endclocking
+
+  `include "tidal.sv"
+
+`begin_tda(ops)
+
+
+  localparam [MPWID-1:0] mpwid_zero = '0; 
+
+
+  sequence reset_sequence;
+    (rst_i == 1'b1);
+  endsequence
+
+
+  sequence t_finish;
+    await_o(t, 2, modmult_sc.ready == 1'b1, MPWID-1);
+  endsequence
+
+
+  property reset_p;
+    reset_sequence
+    |=>
+    t ##0 (modmult_sc.ready == 1'b1);
+  endproperty
+  reset_p_a: assert property (reset_p);
+
+
+  property idle_p;
+    t ##0 (modmult_sc.ready == 1'b1) and
+    t ##0 (modmult_sc.ds    == 1'b0)
+  implies
+    t ##1 (modmult_sc.ready == 1'b1) and
+    t ##1 (modmult_sc.product == $past(modmult_sc.product));
+  endproperty
+  idle_p_a: assert property (idle_p);
+
+
+  /*
+   * Regular modular multiplication if (modulus > mpand) && (modulus > mplier)
+   * This operation takes 1 + MPWID - max{lzc(mpand[WIDTH-1:1]), lzc(mplier[WIDTH-1:1])} clock cycles
+   * The constraint is formulated according to the specification
+   */
+  property modmult_p;
+  logic [2*MPWID-1:0] mpand_v, mplier_v;
+  logic [MPWID-1:0] modulus_v;
+  logic mpand_label_v, mplier_label_v, modulus_label_v;
+    t ##0 (modmult_sc.ready == 1'b1) and
+    t ##0 (modmult_sc.ds    == 1'b1) and
+    t ##0 (modmult_sc.modulus > modmult_sc.mpand) and
+    t ##0 (modmult_sc.modulus > modmult_sc.mplier) and
+
+    t ##0 set_freeze(mpand_v,   {mpwid_zero, modmult_sc.mpand  }) and
+    t ##0 set_freeze(mplier_v,  {mpwid_zero, modmult_sc.mplier }) and
+    t ##0 set_freeze(modulus_v,              modmult_sc.modulus ) and
+    t ##0 set_freeze(mpand_label_v,   modmult_sc.mpand_label    ) and
+    t ##0 set_freeze(mplier_label_v,  modmult_sc.mplier_label   ) and
+    t ##0 set_freeze(modulus_label_v, modmult_sc.modulus_label  )
+  implies
+    during_o(t, 1, t_finish, -1, (modmult_sc.ready == 1'b0)) and
+    t_finish ##0 (modmult_sc.ready == 1'b1) and
+    t_finish ##0 (modmult_sc.product == (mpand_v * mplier_v) % modulus_v) and
+    t_finish ##0 (modmult_sc.product_label == mpand_label_v | mplier_label_v | modulus_label_v);
+  endproperty
+  modmult_p_a: assert property (disable iff (rst_i) modmult_p);
+
+
+  /*
+   * Unconstrained modular multiplication
+   * This operation takes 1 + MPWID - max{lzc(mpand[WIDTH-1:1]), lzc(mplier[WIDTH-1:1])} clock cycles
+   * In case (modulus <= mpand) or (modulus <= mplier), this produces a wrong result
+   */
+  property modmult_general_p;
+  logic [2*MPWID-1:0] mpand_v, mplier_v;
+  logic [MPWID-1:0] modulus_v;
+    t ##0 (modmult_sc.ready == 1'b1) and
+    t ##0 (modmult_sc.ds    == 1'b1)
+  implies
+    during_o(t, 1, t_finish, -1, (modmult_sc.ready == 1'b0)) and
+    t_finish ##0 (modmult_sc.ready == 1'b1);
+  endproperty
+  modmult_general_p_a: assert property (disable iff (rst_i) modmult_general_p);
+
+
+`end_tda
+
+endmodule
+
+bind modmult_sc property_checker #(.MPWID(MPWID)) checker_bind(.clk_i(clk), .rst_i(reset));

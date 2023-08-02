@@ -1,0 +1,120 @@
+// @lang=sva @ts=8
+
+module property_checker
+  // Adjust this parameter in the miter before elaboration with
+  // set_elaborate_option -verilog_parameter modmult_miter.MPWID=4
+  #(parameter MPWID = 32)
+  (
+  input clk,
+  input rst
+  );
+
+  default clocking default_clk @(posedge clk); endclocking
+
+  `include "tidal.sv"
+
+`begin_tda(ops)
+
+
+  sequence reset_sequence;
+    (rst == 1'b1);
+  endsequence
+
+
+  // -------------
+  // - Functions -
+  // -------------
+
+
+  function automatic Control_Equivalence();
+  Control_Equivalence = (
+    (U1.modulus_label_q == U2.modulus_label_q) &&
+    (U1.mpand_label_q   == U2.mpand_label_q  ) &&
+    (U1.mplier_label_q  == U2.mplier_label_q ) &&
+    (U1.secure          == U2.secure         ) &&
+    (U1.timer           == U2.timer          )
+  );
+  endfunction
+
+
+  function automatic Control_Output_Equivalence();
+    Control_Output_Equivalence = (
+      (U1.ready == U2.ready)
+    );
+  endfunction
+
+
+  function automatic Data_Output_Secure();
+    Data_Output_Secure = (
+      (U1.product_label == U2.product_label) &&
+      (U1.product_label || (U1.product == U2.product))
+    );
+  endfunction
+
+
+  // ---------------
+  // - Constraints -
+  // ---------------
+
+  // Assume either labels are set or the corresponding inputs are equal
+  property label_c;
+    (U1.mpand_label   == U2.mpand_label  ) &&
+    (U1.mplier_label  == U2.mplier_label ) &&
+    (U1.modulus_label == U2.modulus_label) &&
+    (U1.mpand_label   || (U1.mpand   == U2.mpand  )) &&
+    (U1.mplier_label  || (U1.mplier  == U2.mplier )) &&
+    (U1.modulus_label || (U1.modulus == U2.modulus));
+  endproperty
+  label_c_a: assume property (label_c);
+
+
+  // --------------
+  // - Invariants -
+  // --------------
+
+  function Invariant();
+    Invariant = (
+      // Assert the equality of data signals depending on the label configuration
+      (U1.mpand_label_q && U1.mplier_label_q                       || (U1.first   == U2.first  ) && (U1.mpreg   == U2.mpreg  )) &&
+      (                                         U1.modulus_label_q || (U1.modreg1 == U2.modreg1) && (U1.modreg2 == U2.modreg2)) &&
+      (U1.mpand_label_q || U1.mplier_label_q || U1.modulus_label_q || (U1.mcreg   == U2.mcreg  ) && (U1.prodreg == U2.prodreg)) &&
+      // Either both instances are idle or both are running
+      ((U1.first && U1.secure) == (U2.first && U2.secure)) &&
+      // The regular operation must finish before the security timer
+      (!(U1.mpand_label_q && U1.mplier_label_q && U1.secure) || (U1.first && U2.first))
+    );
+  endfunction
+
+
+  // -----------------------------------
+  // - UPEC for Data-Independet Timing -
+  // -----------------------------------
+
+  property reset_p;
+    reset_sequence
+    |=>
+    t ##0 Invariant() and
+    t ##0 Data_Output_Secure() and
+    t ##0 Control_Equivalence() and
+    t ##0 Control_Output_Equivalence();
+  endproperty
+  reset_p_a: assert property (reset_p);
+
+
+  property upec_dit_p;
+    t ##0 Invariant() and
+    t ##0 Control_Equivalence()
+  implies
+    t ##1 Invariant() and
+    t ##1 Data_Output_Secure() and
+    t ##1 Control_Equivalence() and
+    t ##1 Control_Output_Equivalence();
+  endproperty
+  upec_dit_p_a: assert property (disable iff (rst) upec_dit_p);
+
+
+`end_tda
+
+endmodule
+
+bind modmult_miter property_checker #(.MPWID(MPWID)) checker_bind(.clk(clk), .rst(rst));
