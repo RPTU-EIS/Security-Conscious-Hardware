@@ -154,6 +154,11 @@ begin
     
         if reset = '1' then
             first <= '1';
+            mpreg <= (others => '0');
+            mcreg <= (others => '0');
+            modreg1 <= (others => '0');
+            modreg2 <= (others => '0');
+            prodreg <= (others => '0');
             mpand_label_q   <= '1';
             mplier_label_q  <= '1';
             modulus_label_q <= '1';
