@@ -21,8 +21,8 @@ module property_checker
   // - Functions -
   // ---------------
 
-  function automatic Control_Equivalence();
-    Control_Equivalence = (
+  function automatic Control_State_Equivalence();
+    Control_State_Equivalence = (
       (U1.cnt_dummy_q    == U2.cnt_dummy_q   ) &&
       (U1.id_q           == U2.id_q          ) &&
       (U1.op_a_label_q   == U2.op_a_label_q  ) &&
@@ -97,7 +97,7 @@ module property_checker
     |=>
     t ##0 Invariant() and
     t ##0 Data_Output_Secure() and
-    t ##0 Control_Equivalence() and
+    t ##0 Control_State_Equivalence() and
     t ##0 Control_Output_Equivalence();
   endproperty
   reset_p_a: assert property (reset_p);
@@ -105,11 +105,11 @@ module property_checker
 
   property upec_dit_p;
     t ##0 Invariant() and
-    t ##0 Control_Equivalence()
+    t ##0 Control_State_Equivalence()
   implies
     t ##1 Invariant() and
     t ##1 Data_Output_Secure() and
-    t ##1 Control_Equivalence() and
+    t ##1 Control_State_Equivalence() and
     t ##1 Control_Output_Equivalence();
   endproperty
   upec_dit_p_a: assert property (disable iff (!rst) upec_dit_p);
