@@ -7,7 +7,7 @@ https://github.com/freecores/BasicRSA
 The BasicRSA module computes the modular exponentiation *(b^e) % mod* required for the RSA cryptosystem. \
 It computes the exponentiation in a square-and-multiply fashion:
 
-    result = 1 * (e[0] * b^1) * (e[1] * b^2) * (e[2] * b^4) * ... 
+    result = (e[0] ? b^1 : 1) * (e[1] ? b^2 : 1) * (e[2] ? b^4 : 1) * ... 
 
 The module uses two instances of a modular multiplication module, one for squaring and on for calculating the intermediate result. \
 It computes the following equation using a shift-and-add algorithm:
