@@ -55,3 +55,48 @@ Two changes have been done in the modmult design:
    Therefore, we now stop the operation as soon as the value of the shifted register is 0 **or 1**, reducing the average and maximum latency by one cycle. 
 
 These changes also reduce the minimum and maximum latency of the rsacypher module by one cycle per required operation.
+
+
+## Timing Behavior (Security-Conscious Design)
+
+### Modular Multiplication (modmult)
+
+The basic idea to achieve a performance optimization base in the modmult component is to use the public operand for shifting. 
+This means that, in case there is one public and one confidential operand, the public operand is chosen to be the multiplier, i.e., the factor that is shifted and thus dictates the timing.
+The confidential operand is the multiplicand that does not influence the timing behavior. \
+If both operands are public, we choose the smaller operand for the shifting as this results in a better performance (cf. the table above).
+If both operands are confidential, we trigger an additional counter to ensure that the maximum latency is met before providing the result.
+
+### Modular Exponentiation (rsacypher)
+
+In the square-and-multiply algorithm, the exponent determines the number of modular multiplications (MMs) to be performed. 
+Furthermore, in our design, the latency of each MM depends on the intermediate results that provide the operands for the suboperation.
+
+The first performance improvement is therefore to optimize the number of MMs whenever there is a public exponent. 
+However, in case of a confidential exponent, the maximum number of MMs (WIDTH) have to be performed.
+
+As mentioned, the length of each MM depends on the intermediate result. 
+Since the intermediate result depends on all three operands, an optimizations seems not possible on first glance.
+However, this is only true for the modmult instance M_i computing the intermediate result, the modmult instance for squaring M_s is simply fed back its result and thus independent of the exponent. \
+An important observation now is that *the latency of M_i can never be larger than the latency of M_s*.
+This is because, for all iterations k, one input of M_i is either 1 (if e[k] is 0) or has the same value as the inputs of M_s (b^2^k).
+If the operand is 1, M_i can finish with the minimum latency of 2 clock cycles.
+If the operand is the same as both operands of M_s, then both modules can finish simultaneously, if they optimize based on this operand. \
+As a result, if *b* and *mod* are public, we can optimize the latency for the individual MMs. 
+The overall timing is then dictated by WIDTH optimized squaring operations. 
+
+In case only the base *b* is public but the modulus *mod* is confidential, we can only optimize the first squaring operation.
+After this initial MM, the result of the squaring operation is confidential, as its value depends on the modulus.
+
+We summarize the possible performance optimizations in the table below:
+
+| b_label | e_label | mod_label | Optimization                                |
+|:-------:|:-------:|:---------:|---------------------------------------------|
+| 0       | 0       | 0         | original performance                        |
+| 0       | 0       | 1         | faster initial MM and reduced number of MMs |
+| 0       | 1       | 0         | individual MMs can be optimized             |
+| 0       | 1       | 1         | faster initial MM                           |
+| 1       | 0       | 0         | reduced number of MMs                       |
+| 1       | 0       | 1         | reduced number of MMs                       |
+| 1       | 1       | 0         | worst-case latency                          |
+| 1       | 1       | 1         | worst-case latency                          |
