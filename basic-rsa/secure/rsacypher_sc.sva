@@ -47,8 +47,7 @@ module property_checker
     reset_sequence
     |=>
     t ##0 (rsacypher_sc.done   == 1'b1) and
-    t ##0 (rsacypher_sc.multgo == 1'b0) and
-    t ##0 (rsacypher_sc.sqrgo  == 1'b0) and
+    t ##0 (rsacypher_sc.bothgo == 1'b0) and
     t ##0 (rsacypher_sc.count  ==   '0) and
     t ##0 (rsacypher_sc.root   ==   '0) and
     t ##0 (rsacypher_sc.modreg ==   '0) and

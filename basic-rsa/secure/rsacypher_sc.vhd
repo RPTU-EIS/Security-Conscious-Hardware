@@ -115,7 +115,7 @@ signal count    : std_logic_vector(KEYSIZE-1 downto 0);   -- working copy of exp
 signal count_sc : std_logic_vector(KEYSIZE-1 downto 0);   -- Dummy counter for confidential exponents
 
 signal multrdy, sqrrdy, bothrdy : std_logic;              -- signals to indicate completion of multiplications
-signal multgo, sqrgo            : std_logic;              -- signals to trigger multiplication and squaring
+signal bothgo                   : std_logic;              -- signal to trigger multiplication and squaring
 signal done                     : std_logic;              -- signal to indicate encryption complete
 
 signal data_label_q    : std_logic; 
@@ -144,7 +144,7 @@ begin
              modulus       => modreg,
              product       => tempout,
              clk           => clk,
-             ds            => multgo,
+             ds            => bothgo,
              reset         => reset,
              ready         => multrdy,
              mpand_label   => tempin_label_q,
@@ -161,7 +161,7 @@ begin
              modulus       => modreg,
              product       => square,
              clk           => clk,
-             ds            => sqrgo,
+             ds            => bothgo,
              reset         => reset,
              ready         => sqrrdy,
              mpand_label   => root_label_q,
@@ -194,18 +194,19 @@ begin
                     else
                         count_sc <= (others => '0');
                     end if;
+                    cypher <= (others => '0');
                     done <= '0';
                     data_label_q <= indata_label;
                     exp_label_q  <= inExp_label;
                 end if;
             -- after first time
             elsif count = 0 and count_sc = 0 then
-                if bothrdy = '1' and multgo = '0' and sqrgo = '0' then
+                if bothrdy = '1' and bothgo = '0' then
                     cypher <= tempout;        -- set output value
                     done <= '1';
                 end if;
             elsif bothrdy = '1' then
-                if multgo = '0' and sqrgo = '0' then
+                if bothgo = '0' then
                     count    <= '0' & count(KEYSIZE-1 downto 1);
                     count_sc <= '0' & count_sc(KEYSIZE-1 downto 1);
                 end if;
@@ -237,9 +238,9 @@ begin
                     root_label_q <= indata_label;
                 end if;
         -- after first time, square result is fed back to multiplier
-            else
+            elsif bothrdy = '1' and bothgo = '0' then
                 root <= square;
-                root_label_q <= square_label_d;
+                root_label_q <= data_label_q or mod_label_q;
             end if;
         end if;
 
@@ -268,11 +269,11 @@ begin
         -- either 1 or the initial message value
                     if inExp(0) = '1' then
                         tempin <= indata;
-                        tempin_label_q <= indata_label;
+                        tempin_label_q <= indata_label or inExp_label;
                     else
                         tempin(KEYSIZE-1 downto 1) <= (others => '0');
                         tempin(0) <= '1';
-                        tempin_label_q <= '0';
+                        tempin_label_q <= inExp_label;
                     end if;
                     sqrin(KEYSIZE-1 downto 1) <= (others => '0');
                     sqrin(0) <= '1';
@@ -283,7 +284,7 @@ begin
         -- If the least significant bit of the exponent is '1' the result of the most recent
         -- squaring operation is fed to the multiplier.
         -- Otherwise, the square value is set to 1 to indicate no multiplication.
-            else
+            elsif bothrdy = '1' and bothgo = '0' then
                 tempin <= tempout;
                 tempin_label_q <= tempout_label_d;
                 if count(0) = '1' then
@@ -292,7 +293,7 @@ begin
                 else
                     sqrin(KEYSIZE-1 downto 1) <= (others => '0');
                     sqrin(0) <= '1';
-                    sqrin_label_q <= '0';
+                    sqrin_label_q <= square_label_d;
                 end if;
             end if;
         end if;
@@ -305,37 +306,31 @@ begin
     begin
         
         if reset = '1' then
-            multgo <= '0';
-            sqrgo  <= '0';
+            bothgo <= '0';
         elsif rising_edge(clk) then
         
             -- first time through - automatically trigger first multiplier cycle
             if done = '1' then
                 if ds = '1' then
-                    multgo <= '1';
-                    sqrgo  <= '1';
+                    bothgo <= '1';
                 end if;
                 
             -- after first time, trigger multipliers when both operations are complete
             elsif count > 0 then
                 if bothrdy = '1' then
-                    multgo <= '1';
-                    sqrgo  <= '1';
+                    bothgo <= '1';
                 end if;
                 
-            -- continue squaring if the exponent is confidential
+            -- continue if the exponent is confidential
             elsif count_sc > 0 then
                 if bothrdy = '1' then
-                    sqrgo  <= '1';
+                    bothgo <= '1';
                 end if;
             end if;
             
             -- when multipliers have been started, disable multiplier inputs
-            if multgo = '1' then
-                multgo <= '0';
-            end if;
-            if sqrgo = '1' then
-                sqrgo <= '0';
+            if bothgo = '1' then
+                bothgo <= '0';
             end if;
             
         end if;

@@ -1,0 +1,173 @@
+// @lang=sva @ts=8
+
+module property_checker
+  // Adjust this parameter in the miter before elaboration with
+  // set_elaborate_option -verilog_parameter rsacypher_miter.KEYSIZE=32
+  #(parameter KEYSIZE = 32)
+  (
+  input clk,
+  input rst
+  );
+
+  default clocking default_clk @(posedge clk); endclocking
+
+  `include "tidal.sv"
+
+`begin_tda(ops)
+
+
+  sequence reset_sequence;
+    (rst == 1'b1);
+  endsequence
+
+
+  // -------------
+  // - Functions -
+  // -------------
+
+  function automatic Control_State_Equivalence();
+  Control_State_Equivalence = (
+    (U1.bothgo         == U2.bothgo        ) &&
+    (U1.count_sc       == U2.count_sc      ) &&
+    (U1.data_label_q   == U2.data_label_q  ) &&
+    (U1.done           == U2.done          ) &&
+    (U1.exp_label_q    == U2.exp_label_q   ) &&
+    (U1.mod_label_q    == U2.mod_label_q   ) &&
+    (U1.root_label_q   == U2.root_label_q  ) &&
+    (U1.sqrin_label_q  == U2.sqrin_label_q ) &&
+    (U1.tempin_label_q == U2.tempin_label_q)
+  );
+  endfunction
+
+
+  function automatic Control_Output_Equivalence();
+    Control_Output_Equivalence = (
+      (U1.ready          == U2.ready         ) &&
+      (U1.modmultiply.ds == U2.modmultiply.ds) &&
+      (U1.modsqr.ds      == U2.modsqr.ds     )
+    );
+  endfunction
+
+
+  /*
+   * Includes the black-box inputs
+   * The only real constraint introduced is that we allow different mpliers in the submodules as long as modmultiply finishes faster than modsqr
+   * We loosened this label to optimize in case of a confidential exponent with public data and modulus
+   * It does not undermine overall security as the timing is always dictated by public information
+   */
+  function automatic Data_Output_Secure();
+    Data_Output_Secure = (
+      (U1.cypher_label == U2.cypher_label) &&
+      (U1.cypher_label || (U1.cypher == U2.cypher)) &&
+
+      (U1.modmultiply.mpand_label   == U2.modmultiply.mpand_label  ) &&
+      (U1.modmultiply.mplier_label  == U2.modmultiply.mplier_label ) &&
+      (U1.modmultiply.modulus_label == U2.modmultiply.modulus_label) &&
+      (U1.modmultiply.mpand_label   || (U1.modmultiply.mpand   == U2.modmultiply.mpand  )) &&
+      (U1.modmultiply.mplier_label  || 
+      (U1.modmultiply.mplier == U2.modmultiply.mplier) || 
+      ((U1.modmultiply.mplier == 1) && (U2.modmultiply.mplier == U2.modsqr.mplier) && (U2.modsqr.mplier_label == 1'b0)) ||
+      ((U2.modmultiply.mplier == 1) && (U1.modmultiply.mplier == U1.modsqr.mplier) && (U1.modsqr.mplier_label == 1'b0))
+      ) &&
+      (U1.modmultiply.modulus_label || (U1.modmultiply.modulus == U2.modmultiply.modulus)) &&
+
+      (U1.modsqr.mpand_label   == U2.modsqr.mpand_label  ) &&
+      (U1.modsqr.mplier_label  == U2.modsqr.mplier_label ) &&
+      (U1.modsqr.modulus_label == U2.modsqr.modulus_label) &&
+      (U1.modsqr.mpand_label   || (U1.modsqr.mpand   == U2.modsqr.mpand  )) &&
+      (U1.modsqr.mplier_label  || (U1.modsqr.mplier  == U2.modsqr.mplier )) &&
+      (U1.modsqr.modulus_label || (U1.modsqr.modulus == U2.modsqr.modulus))
+    );
+  endfunction
+
+
+  // ---------------
+  // - Constraints -
+  // ---------------
+
+  // Assume either labels are set or the corresponding inputs are equal
+  property label_c;
+    (U1.indata_label == U2.indata_label) &&
+    (U1.inExp_label  == U2.inExp_label ) &&
+    (U1.inMod_label  == U2.inMod_label ) &&
+    (U1.indata_label || (U1.indata == U2.indata)) &&
+    (U1.inExp_label  || (U1.inExp  == U2.inExp )) &&
+    (U1.inMod_label  || (U1.inMod  == U2.inMod )) &&
+
+    (U1.modmultiply.product_label == U2.modmultiply.product_label) &&
+    (U1.modmultiply.product_label || (U1.modmultiply.product == U2.modmultiply.product)) &&
+
+    (U1.modsqr.product_label == U2.modsqr.product_label) &&
+    (U1.modsqr.product_label || (U1.modsqr.product == U2.modsqr.product));
+  endproperty
+  label_c_a: assume property (label_c);
+
+
+  // Constrain the black-box outputs based on the UPEC-DIT proof of the modmult module
+  // This assumption is valid, as long as the inputs of the black-box adhere the conditions of Data_Output_Secure() and Control_Output_Equivalence()
+  property input_c;
+    (U1.modmultiply.ready == U2.modmultiply.ready) &&
+    (U1.modsqr.ready      == U2.modsqr.ready     );
+  endproperty
+  input_c_a: assume property (input_c);
+
+
+  // Model the label propagation within the submodule
+  // This property has been proven individually
+  property label_propagation_c;
+    (U1.modmultiply.product_label == ($past(U1.modmultiply.ready) && $past(U1.modmultiply.ds) ? $past(U1.modmultiply.mpand_label) || $past(U1.modmultiply.mplier_label) || $past(U1.modmultiply.modulus_label) : $past(U1.modmultiply.product_label))) &&
+    (U1.modsqr.product_label      == ($past(U1.modsqr.ready)      && $past(U1.modsqr.ds)      ? $past(U1.modsqr.mpand_label)      || $past(U1.modsqr.mplier_label)      || $past(U1.modsqr.modulus_label)      : $past(U1.modsqr.product_label)     )) &&
+    (U2.modmultiply.product_label == ($past(U2.modmultiply.ready) && $past(U2.modmultiply.ds) ? $past(U2.modmultiply.mpand_label) || $past(U2.modmultiply.mplier_label) || $past(U2.modmultiply.modulus_label) : $past(U2.modmultiply.product_label))) &&
+    (U2.modsqr.product_label      == ($past(U2.modsqr.ready)      && $past(U2.modsqr.ds)      ? $past(U2.modsqr.mpand_label)      || $past(U2.modsqr.mplier_label)      || $past(U2.modsqr.modulus_label)      : $past(U2.modsqr.product_label)     ));
+  endproperty
+  label_propagation_c_a: assume property (label_propagation_c);
+
+  
+  // Model the ready propagation within the submodule
+  // This property has been proven individually
+  property modmult_ready_c;
+    (!$past(U1.modmultiply.ready) || U1.modmultiply.ready || $past(U1.modmultiply.ds)) &&
+    (!$past(U1.modsqr.ready)      || U1.modsqr.ready      || $past(U1.modsqr.ds)     ) &&
+    (!$past(U2.modmultiply.ready) || U2.modmultiply.ready || $past(U2.modmultiply.ds)) &&
+    (!$past(U2.modsqr.ready)      || U2.modsqr.ready      || $past(U2.modsqr.ds)     );
+  endproperty
+  modmult_ready_c_a: assume property (modmult_ready_c);
+
+
+  // Ensure modmult is ready after reset
+  // This property has been proven individually
+  property modmult_reset_c;
+    (!$past(rst) || U1.modmultiply.ready && U1.modsqr.ready && U2.modmultiply.ready && U2.modsqr.ready);
+  endproperty
+  modmult_reset_c_a: assume property (modmult_reset_c);
+
+
+  // -----------------------------------
+  // - UPEC for Data-Independet Timing -
+  // -----------------------------------
+
+  property reset_p;
+    reset_sequence
+    |=>
+    t ##0 Data_Output_Secure() and
+    t ##0 Control_State_Equivalence() and
+    t ##0 Control_Output_Equivalence();
+  endproperty
+  reset_p_a: assert property (reset_p);
+
+
+  property upec_dit_p;
+    t ##0 Control_State_Equivalence()
+  implies
+    t ##1 Data_Output_Secure() and
+    t ##1 Control_State_Equivalence() and
+    t ##1 Control_Output_Equivalence();
+  endproperty
+  upec_dit_p_a: assert property (disable iff (rst) upec_dit_p);
+
+
+`end_tda
+
+endmodule
+
+bind rsacypher_sc_miter property_checker #(.KEYSIZE(KEYSIZE)) checker_bind(.clk(clk), .rst(rst));
