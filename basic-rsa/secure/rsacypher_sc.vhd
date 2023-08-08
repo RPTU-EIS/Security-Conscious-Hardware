@@ -131,7 +131,7 @@ signal tempout_label_d : std_logic;
 
 begin
 
-    cypher_label <= '1' when (data_label_q or exp_label_q or mod_label_q) else '0';
+    cypher_label <= '1' when (data_label_q or exp_label_q or mod_label_q) = '1' else '0';
     
     ready <= done;
     bothrdy <= multrdy and sqrrdy;

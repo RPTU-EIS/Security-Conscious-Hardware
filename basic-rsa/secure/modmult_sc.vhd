@@ -144,7 +144,7 @@ begin
         mcreg2 <= mcreg when '1',
                   mcreg1 when others;
 
-    ready <= secure when mpand_label_q and mplier_label_q else first;
+    ready <= secure when (mpand_label_q and mplier_label_q) = '1' else first;
 
     product_label <= mpand_label_q or mplier_label_q or modulus_label_q;
 
@@ -167,10 +167,10 @@ begin
             -- First time through, set up registers to start multiplication procedure
             -- Input values are sampled only once
                 if ds = '1' then
-                    if mplier_label then --multiplier is confidential
+                    if mplier_label = '1' then --multiplier is confidential
                         mpreg <= mpand;
                         mcreg <= "00" & mplier;
-                    elsif mpand_label then --multiplicand is confidential
+                    elsif mpand_label = '1' then --multiplicand is confidential
                         mpreg <= mplier;
                         mcreg <= "00" & mpand;
                     elsif mplier > mpand then -- use smaller input for a better performance
@@ -217,7 +217,7 @@ begin
             timer <= (others => '0');
         elsif rising_edge(clk) then
             if ds = '1' and first = '1' and secure = '1' then
-                if mplier_label and mpand_label then
+                if (mplier_label and mpand_label) = '1' then
                     timer <= (others => '1');
                     secure <= '0';
                 end if;
